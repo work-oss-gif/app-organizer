@@ -291,7 +291,7 @@ var splatMats={
 var splatGeo=new THREE.CircleGeometry(1,14);
 var dripGeo=new THREE.CylinderGeometry(.5,.5,1,6); dripGeo.translate(0,-.5,0);
 var bitGeo=new THREE.SphereGeometry(0.025,6,5);
-var allSplats=[], dripping=[], bits=[], tSplats=0;
+var allSplats=[], dripping=[], bits=[], litter=[], tSplats=0;
 function makeSplat(size,drips){
   var g=new THREE.Group(), i, d;
   for(i=0;i<5;i++){
@@ -318,6 +318,7 @@ function addSplatTo(parent,wp,wn,size,drips){
   g.position.copy(parent.worldToLocal(wp.clone()));
   if(Math.abs(wn.y)>0.9){g.rotation.x=wn.y>0?-Math.PI/2:Math.PI/2}
   else g.lookAt(wp.clone().add(wn));
+  g.userData.n=wn.clone();
   allSplats.push(g);
   if(allSplats.length>140){var o=allSplats.shift();if(o.parent)o.parent.remove(o)}
 }
@@ -340,6 +341,7 @@ function updateBits(dt){
 function clearSplats(){
   allSplats.forEach(function(g){if(g.parent)g.parent.remove(g)});
   allSplats.length=0; dripping.length=0; tSplats=0;
+  litter.forEach(function(m){scene.remove(m)}); litter.length=0; clearCleaner();
   bits.forEach(function(b){scene.remove(b.m)}); bits.length=0;
 }
 var EGG_LINES=['MY CARDIGAN!','IS THAT AN EGG?!','WHO IS THROWING EGGS?!','THAT WAS MY BREAKFAST!','YOLK ON MY TIE!'];
@@ -376,6 +378,85 @@ function splatSurface(p){
   else if(p.x>4.9)addSplatTo(scene,new V3(4.93,clamp(p.y,.3,3),p.z),new V3(-1,0,0),sz,true);
   else if(p.y>3.1)addSplatTo(scene,new V3(p.x,3.18,p.z),new V3(0,-1,0),sz,false);
   else addSplatTo(scene,new V3(p.x,clamp(p.y,.3,3),4.93),new V3(0,0,-1),sz,true);
+}
+
+
+/* ---------- the mop kid: teacher sends a student to clean floor and wall mess ---------- */
+var cleaner=null, askT=0, AISLES=[-4.6,-2.4,0,2.4,4.6];
+function nearestAisle(x){var b=AISLES[0];AISLES.forEach(function(a){if(Math.abs(a-x)<Math.abs(b-x))b=a});return b}
+function makeStanding(i){
+  var g=new THREE.Group(), shirt=SHIRTS[i%SHIRTS.length];
+  box(.44,.6,.26,shirt,0,1.05,0,g);
+  var head=new THREE.Group(); head.position.set(0,1.5,0); g.add(head);
+  ball(.2,SKINS[i%SKINS.length],0,.05,0,head); ball(.215,HAIRS[(i*3)%HAIRS.length],0,.1,-.03,head,.9);
+  ball(.03,0x111111,-.07,.07,.18,head); ball(.03,0x111111,.07,.07,.18,head); box(.08,.02,.02,0x7a2a2a,0,-.06,.19,head);
+  function limb(x,y,len,col){var p=new THREE.Group();p.position.set(x,y,0);g.add(p);box(.14,len,.16,col,0,-len/2,0,p);return p}
+  var legL=limb(-.12,.75,.75,0x35394a), legR=limb(.12,.75,.75,0x35394a), armL=limb(-.3,1.3,.55,shirt), armR=limb(.3,1.3,.55,shirt);
+  var mop=new THREE.Group(); mop.position.set(.3,1.0,.1); g.add(mop);
+  var stick=new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,1.15,6),mat(0x8a6a3e)); stick.position.y=-.575; stick.castShadow=true; mop.add(stick);
+  box(.34,.06,.2,0x7d848b,0,-1.15,0,mop); box(.3,.1,.16,0xe6e6e6,0,-1.21,0,mop);
+  g.userData={legL:legL,legR:legR,armL:armL,armR:armR,mop:mop,ph:0};
+  return g;
+}
+function messTargets(){return allSplats.filter(function(g){return g.parent===scene&&g.userData.n&&g.userData.n.y>-0.9})}
+function standPoint(g){
+  var p=g.position, n=g.userData.n;
+  if(n.y>0.9){var a=nearestAisle(p.x);return new V3(clamp(p.x,a-.4,a+.4),0,clamp(p.z,-7.2,4.4))}
+  if(n.z>0.9)return new V3(clamp(p.x,-4.6,4.6),0,-7.2);
+  if(n.z<-0.9)return new V3(nearestAisle(p.x),0,4.3);
+  return new V3(n.x>0?-4.6:4.6,0,clamp(p.z,-7.2,4.4));
+}
+function route(f,t){
+  var a=nearestAisle(f.x), b=nearestAisle(t.x), p=[new V3(a,0,f.z)];
+  if(a!==b){p.push(new V3(a,0,-3.6));p.push(new V3(b,0,-3.6))}
+  p.push(new V3(b,0,t.z)); p.push(new V3(t.x,0,t.z));
+  return p;
+}
+function turnTo(o,a,dt){var d=a-o.rotation.y; d=Math.atan2(Math.sin(d),Math.cos(d)); o.rotation.y+=d*Math.min(1,dt*10)}
+function planNext(){
+  var c=cleaner, tg=messTargets(), f=c.fig.position;
+  if(!tg.length){c.s='back';c.tg=null;c.path=route(f,c.seat);return}
+  var best=null,bd=1e9;
+  tg.forEach(function(g){var d=f.distanceTo(g.position);if(d<bd){bd=d;best=g}});
+  c.tg=best; c.path=route(f,standPoint(best)); c.s='out';
+}
+function startCleaning(){
+  if(!messTargets().length)return;
+  var idx=Math.floor(Math.random()*students.length), st=students[idx];
+  var fig=makeStanding(idx); fig.position.set(st.position.x,0,st.position.z); fig.rotation.y=Math.PI; scene.add(fig);
+  st.visible=false;
+  cleaner={fig:fig,st:st,seat:st.position.clone(),path:[],tg:null,s:'out',t:0,mopT:1.6};
+  planNext();
+  say(st.userData.name+', fetch the mop and clean up this mess!',3.6);
+}
+function clearCleaner(){
+  if(!cleaner)return; scene.remove(cleaner.fig); cleaner.st.visible=true; cleaner=null; askT=0;
+}
+function updateCleaner(dt){
+  var c=cleaner; if(!c)return; var f=c.fig, u=f.userData;
+  if(c.s==='out'||c.s==='back'){
+    var tgt=c.path[0];
+    if(!tgt){
+      if(c.s==='back'){clearCleaner();return}
+      c.s='mop';c.t=0;return;
+    }
+    var dx=tgt.x-f.position.x, dz=tgt.z-f.position.z, d=Math.hypot(dx,dz), step=2.0*dt;
+    if(d<=step){f.position.x=tgt.x;f.position.z=tgt.z;c.path.shift()}
+    else{f.position.x+=dx/d*step;f.position.z+=dz/d*step;turnTo(f,Math.atan2(dx,dz),dt)}
+    u.ph+=dt*9; u.legL.rotation.x=Math.sin(u.ph)*.6; u.legR.rotation.x=-Math.sin(u.ph)*.6;
+    u.armL.rotation.x=-Math.sin(u.ph)*.4; u.armR.rotation.x=-.7; f.position.y=Math.abs(Math.sin(u.ph))*.03;
+    u.mop.rotation.set(-.5,0,0);
+  }else{
+    var g=c.tg;
+    if(!g||!g.parent){planNext();return}
+    c.t+=dt; u.legL.rotation.x=u.legR.rotation.x=0; f.position.y=0;
+    turnTo(f,Math.atan2(g.position.x-f.position.x,g.position.z-f.position.z),dt);
+    var wall=Math.abs(g.userData.n.y)<0.9;
+    u.armR.rotation.x=wall?-1.5:-.8; u.armL.rotation.x=-.3;
+    u.mop.rotation.x=wall?-1.4:-.65; u.mop.rotation.z=Math.sin(c.t*7)*.4;
+    g.scale.setScalar(Math.max(0.01,1-c.t/c.mopT));
+    if(c.t>=c.mopT){g.parent.remove(g);var k=allSplats.indexOf(g);if(k>=0)allSplats.splice(k,1);planNext()}
+  }
 }
 
 /* ---------- game state ---------- */
@@ -434,7 +515,7 @@ function launch(egg){
   if(egg){m=new THREE.Mesh(new THREE.SphereGeometry(0.07,12,10),new THREE.MeshStandardMaterial({color:0xf3e3c3,roughness:.5})); m.scale.y=1.3}
   else m=new THREE.Mesh(new THREE.IcosahedronGeometry(0.07,0),new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,flatShading:true}));
   m.castShadow=true; m.position.copy(camera.position).addScaledVector(dir,0.5); m.position.y-=0.12; scene.add(m);
-  balls.push({m:m,egg:egg,v:dir.multiplyScalar(egg?15:14).add(new THREE.Vector3(0,egg?1.2:1.6,0)),life:3.5});
+  balls.push({m:m,egg:egg,v:dir.multiplyScalar(egg?15:14).add(new THREE.Vector3(0,egg?1.2:1.6,0)),life:egg?3.5:12});
 }
 function throwPaper(){
   if(state!=='play'||cooldown>0)return; cooldown=0.35;
@@ -508,26 +589,39 @@ function updateTeacher(dt){
 
 function updateBalls(dt){
   for(var i=balls.length-1;i>=0;i--){
-    var b=balls[i]; b.life-=dt; b.v.y-=5.5*dt; b.m.position.addScaledVector(b.v,dt); b.m.rotation.x+=dt*8;
+    var b=balls[i]; b.life-=dt; b.v.y-=5.5*dt; b.m.position.addScaledVector(b.v,dt);
     var p=b.m.position, done=false;
-    tHead.getWorldPosition(headW);
-    if(p.distanceTo(headW)<0.32){
-      done=true; hits++; SFX.thud();
-      if(b.egg)eggHitTeacher(p,true); else {addScore(150,'HEADSHOT!'); angryTeacher(); laughNear(new THREE.Vector3(0,0,-1),12)}
-    }else if(Math.abs(p.x-teacher.position.x)<0.4&&Math.abs(p.z-teacher.position.z)<0.3&&p.y<1.5&&p.y>0.2){
-      done=true; hits++; SFX.thud();
-      if(b.egg)eggHitTeacher(p,false); else {addScore(80,'Got him!'); angryTeacher(); laughNear(new THREE.Vector3(0,0,-1),8)}
-    }else for(var j=0;j<students.length;j++){
-      var st=students[j]; st.userData.head.getWorldPosition(tmpV);
-      if(p.distanceTo(tmpV)<0.26){done=true; SFX.thud(); if(b.egg)eggHitStudent(st,p); addScore(30,'Hit '+st.userData.name); laughNear(st.position,5); break}
+    if(!b.hit){
+      tHead.getWorldPosition(headW);
+      if(p.distanceTo(headW)<0.32){
+        done=true; hits++; SFX.thud();
+        if(b.egg)eggHitTeacher(p,true); else {addScore(150,'HEADSHOT!'); angryTeacher(); laughNear(new THREE.Vector3(0,0,-1),12)}
+      }else if(Math.abs(p.x-teacher.position.x)<0.4&&Math.abs(p.z-teacher.position.z)<0.3&&p.y<1.5&&p.y>0.2){
+        done=true; hits++; SFX.thud();
+        if(b.egg)eggHitTeacher(p,false); else {addScore(80,'Got him!'); angryTeacher(); laughNear(new THREE.Vector3(0,0,-1),8)}
+      }else for(var j=0;j<students.length;j++){
+        var st=students[j]; st.userData.head.getWorldPosition(tmpV);
+        if(p.distanceTo(tmpV)<0.26){done=true; SFX.thud(); if(b.egg)eggHitStudent(st,p); addScore(30,'Hit '+st.userData.name); laughNear(st.position,5); break}
+      }
+      if(done&&!b.egg){b.hit=true; done=false; b.v.multiplyScalar(-0.15); b.v.y=1.2}   // paper bounces off and drops
     }
-    if(!done&&b.egg){
-      if(p.y<0.07||p.z<-7.8||p.z>4.9||Math.abs(p.x)>4.9||p.y>3.1){splatSurface(p);done=true}
-    }else if(!done){
-      if(p.y<0.07){p.y=0.07; b.v.y*=-0.3; b.v.x*=0.6; b.v.z*=0.6; if(b.life>1)b.life=1}
-      if(p.z<-7.8||p.z>4.9||Math.abs(p.x)>4.9||p.y>3.1){b.v.multiplyScalar(0.2)}
+    if(b.egg){
+      b.m.rotation.x+=dt*8;
+      if(!done&&(p.y<0.07||p.z<-7.8||p.z>4.9||Math.abs(p.x)>4.9||p.y>3.1)){splatSurface(p);done=true}
+      if(done||b.life<=0){scene.remove(b.m);balls.splice(i,1)}
+    }else{
+      var sp=b.v.length(); b.m.rotation.x+=dt*sp*.6; b.m.rotation.z+=dt*sp*.4;
+      if(p.y<0.07){p.y=0.07;b.v.y*=-0.3;b.v.x*=0.6;b.v.z*=0.6}
+      if(p.z<-7.8){p.z=-7.8;b.v.z=Math.abs(b.v.z)*.2}
+      if(p.z>4.9){p.z=4.9;b.v.z=-Math.abs(b.v.z)*.2}
+      if(p.x<-4.9){p.x=-4.9;b.v.x=Math.abs(b.v.x)*.2}
+      if(p.x>4.9){p.x=4.9;b.v.x=-Math.abs(b.v.x)*.2}
+      if(p.y>3.1){p.y=3.1;b.v.y=-Math.abs(b.v.y)*.2}
+      if((p.y<=0.0701&&b.v.lengthSq()<0.5)||b.life<=0){      // settles and stays on the floor
+        p.y=0.07; b.m.scale.setScalar(rand(.9,1.25)); balls.splice(i,1); litter.push(b.m);
+        if(litter.length>150)scene.remove(litter.shift());
+      }
     }
-    if(done||b.life<=0){scene.remove(b.m);balls.splice(i,1)}
   }
 }
 function angryTeacher(){
@@ -559,10 +653,13 @@ function frame(now){
     if(keys.ArrowDown||keys.s)pitch=clamp(pitch-dt*1.1,-0.6,0.5);
     if(timeLeft<=0){timeLeft=0;updateHud();endGame('bell')}
     if(speechTimer>0){speechTimer-=dt;if(speechTimer<=0)$('speech').textContent=''}
+    if(!cleaner){
+      if(messTargets().length){askT+=dt; if(askT>4&&T.s!=='ANGRY'&&T.s!=='TURN'){askT=0;startCleaning()}} else askT=0;
+    }
     updateHud();
   }
   if(state!=='over'||true){updateTeacher(dt)}
-  updateBalls(dt); updateBits(dt); updateStudents(dt);
+  updateBalls(dt); updateBits(dt); updateStudents(dt); updateCleaner(dt);
   hand.rotation.z=-((GAME_SECONDS-timeLeft)/GAME_SECONDS)*Math.PI*2;
   camera.rotation.y=yaw+(state==='menu'?Math.sin(clock*0.3)*0.25:0);
   camera.rotation.x=pitch;
@@ -579,11 +676,11 @@ function showStart(){
   overlay.hidden=false; hud.hidden=true;
   overlay.innerHTML='<h1>Back Row Menace</h1>'+
   '<p>Mr. Pemberton is writing on the board. Cause chaos while his back is turned. Get seen and you earn a strike. Three strikes means detention.</p>'+
-  '<ul><li><kbd>Space</kbd><span>Throw paper. Aim with the crosshair. Hit a classmate for 30, the teacher for 80 to 150.</span></li>'+
+  '<ul><li><kbd>Space</kbd><span>Throw paper. Aim with the crosshair. Hit a classmate for 30, the teacher for 80 to 150. Paper stays where it lands.</span></li>'+
   '<li><kbd>E</kbd><span>Throw an egg. It cracks on impact and the mess stays on him, the walls and the floor. 120 to 200 points. You get 10, and one more every 10 seconds.</span></li>'+
   '<li><kbd>F</kbd><span>Whoopee cushion. 15 points and some giggles, but he might hear it.</span></li>'+
   '<li><kbd>H</kbd><span>Air horn. 60 points, but he always turns around.</span></li></ul>'+
-  '<p><span style="color:var(--dim)">Drag or use arrow keys to look around. Watch the status light at the top. Three clean successes in a row raise your multiplier.</span></p>'+
+  '<p><span style="color:var(--dim)">Drag or use arrow keys to look around. The teacher sends a student with a mop to clean floor and wall mess, but the egg on him stays. Watch the status light at the top. Three clean successes in a row raise your multiplier.</span></p>'+
   '<p><button id="go">Start class</button></p>'+(best()?'<p style="color:var(--dim)">Best chaos: '+best()+'</p>':'');
   $('go').onclick=startGame; $('go').focus();
 }
