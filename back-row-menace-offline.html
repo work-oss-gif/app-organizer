@@ -529,7 +529,7 @@ function labelTex(text,w,h,font,bg,fg){
   box(0.58,0.11,0.05,0xc9a23a,0.7,0.88,-0.2,O_);
   var np=new THREE.Mesh(new THREE.PlaneGeometry(0.52,0.075),new THREE.MeshBasicMaterial({map:labelTex('PRINCIPAL HARGROVE',416,60,'bold 34px sans-serif','#c9a23a','#2a1a00')})); np.position.set(0.7,0.88,-0.173); O_.add(np);
   box(0.32,0.02,0.24,0xe0b872,-0.5,0.83,-0.2,O_);
-  var fl=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.22),new THREE.MeshBasicMaterial({map:labelTex('DISCIPLINE FILE',300,220,'bold 40px sans-serif','#e0b872','#a31515')})); fl.rotation.x=-Math.PI/2; fl.position.set(-0.5,0.842,-0.2); O_.add(fl);
+  var fl=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.22),new THREE.MeshBasicMaterial({map:labelTex('PARENTS MUST SIGN',300,220,'bold 30px sans-serif','#e0b872','#a31515')})); fl.rotation.x=-Math.PI/2; fl.position.set(-0.5,0.842,-0.2); O_.add(fl);
   box(0.3,0.05,0.22,0xffffff,0.5,0.85,-0.65,O_);
   var mug=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.1,10),mat(0xdddddd)); mug.position.set(0.95,0.87,-0.5); mug.castShadow=true; O_.add(mug);
   box(0.12,0.03,0.12,0x222222,-0.9,0.83,-0.5,O_); box(0.02,0.4,0.02,0x222222,-0.9,1.03,-0.5,O_); box(0.2,0.1,0.14,0x2c6b3a,-0.9,1.25,-0.5,O_);
@@ -559,9 +559,9 @@ var sHead=sPlayer.userData.head;
 var O={phase:'none',t:0,dur:0,lines:[],i:0,final:false,talking:false,angry:false,blipT:0,egged:0,blame:'Dave'};
 var sendT=0, officeClock=0;
 var OFFICE_LINES={
-  1:['Ah. Take a seat.','Mr. Pemberton tells me you have been causing trouble in his class.','That is strike number one. Let us keep it that way.'],
-  2:['You again?','Two strikes already. I do not enjoy seeing you in here.','One more and it is detention.'],
-  3:['Three strikes.','I have seen enough of you.','Detention. After school. Do not argue.']
+  1:['Ah. Take a seat.','Mr. Pemberton tells me you have been causing trouble in his class.','That is strike number one. Let us keep it that way.','I am calling your parents. They must come down to the school and sign your discipline form.'],
+  2:['You again?','Two strikes already. I do not enjoy seeing you in here.','Your parents must come down to school again and sign another form.','One more and it is detention.'],
+  3:['Three strikes.','I have seen enough of you.','Detention. After school. Do not argue.','And your parents must come down to school tomorrow and sign your detention slip.']
 };
 function sendToOffice(){state='sending'; sendT=1.9}
 function beginOffice(){
@@ -599,13 +599,13 @@ function eggPrincipal(){
 function choose(k){
   if(O.phase!=='choice')return; $('ochoices').innerHTML='';
   var line;
-  if(k==='sorry')line='Good. I appreciate honesty. Back to class, and behave.';
+  if(k==='sorry')line='Good. I appreciate honesty. But your parents must still come down to school and sign the form. Back to class.';
   else if(k==='blame'){
-    if(Math.random()<0.5){line='Hmm. I will have a word with '+O.blame+'. Back to class.'; score+=50; pop('+50 Smooth talker!')}
-    else{line='Do not blame others! That is 50 chaos points off.'; score=Math.max(0,score-50); pop('−50 Caught lying',true)}
+    if(Math.random()<0.5){line='Hmm. I will have a word with '+O.blame+'. But your parents must still come down and sign the form. Back to class.'; score+=50; pop('+50 Smooth talker!')}
+    else{line='Do not blame others! That is 50 chaos points off, and your parents must come down to school and sign.'; score=Math.max(0,score-50); pop('−50 Caught lying',true)}
   }else{
     eggPrincipal(); score+=100; pop('+100 Egged the principal!'); O.angry=true;
-    line=O.egged>1?'AGAIN?! OUT OF MY OFFICE!':'WHAT IS THAT ON MY FACE?! OUT! OUT!';
+    line=O.egged>1?'AGAIN?! OUT OF MY OFFICE! Your parents must come down and sign!':'WHAT IS THAT ON MY FACE?! OUT! And your parents must come down to school and sign!';
   }
   updateHud(); showLine(line); O.phase='reply'; O.t=0; O.dur=Math.max(2.6,line.length*0.05); O.talking=true;
 }
