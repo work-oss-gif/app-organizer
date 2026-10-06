@@ -14,6 +14,7 @@
   --display:'Permanent Marker','Marker Felt',cursive; --body:'Nunito',system-ui,sans-serif;
   color-scheme:dark;
 }
+[hidden]{display:none!important}
 html,body{height:100%;margin:0}
 body{background:var(--ground);color:var(--ink);font:600 15px/1.4 var(--body);overflow:hidden;-webkit-user-select:none;user-select:none}
 #stage{position:relative;height:100%;width:100%;overflow:hidden;background:var(--ground)}
@@ -49,6 +50,15 @@ body{background:var(--ground);color:var(--ink);font:600 15px/1.4 var(--body);ove
 #flash{position:absolute;inset:0;background:var(--danger);opacity:0;pointer-events:none}
 #flash.go{animation:fl .5s ease-out}
 @keyframes fl{from{opacity:.45}to{opacity:0}}
+#fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .45s;z-index:5}
+#fade.on{opacity:1}
+#office{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:min(640px,calc(100% - 32px));padding:14px 16px;box-sizing:border-box;z-index:4;cursor:pointer}
+#office .who{font:400 14px var(--display);color:var(--accent);letter-spacing:.06em}
+#oline{font:700 18px/1.35 var(--body);margin:6px 0 2px;min-height:50px}
+#ochoices{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+#ochoices button{font:800 15px var(--body);text-align:left;color:var(--ink);background:#2a2217;border:2px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 12px;cursor:pointer}
+#ochoices button:hover:not(:disabled),#ochoices button:focus-visible{border-color:var(--accent);outline:none}
+#ochoices button:disabled{opacity:.4;cursor:not-allowed}
 #overlay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100% - 32px));padding:22px 22px 20px;box-sizing:border-box;text-align:left;max-height:calc(100% - 24px);overflow:auto}
 #overlay h1{font:400 40px/1 var(--display);margin:0 0 6px;color:var(--accent)}
 #overlay p{margin:6px 0;color:var(--ink)}
@@ -80,6 +90,8 @@ kbd{font:800 12px var(--body);background:#3a3226;border:1px solid #5a4d3a;border
       <button id="bHorn"><span>Air horn</span><small><kbd>H</kbd></small></button>
     </div>
   </div>
+  <div id="office" class="card" hidden><div class="who">PRINCIPAL HARGROVE</div><div id="oline"></div><div id="ochoices"></div></div>
+  <div id="fade"></div>
   <div id="overlay" class="card"></div>
 </div>
 
@@ -114,6 +126,7 @@ renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 stage.insertBefore(renderer.domElement,stage.firstChild);
 var cv=renderer.domElement;
 
+var officeCam=null;
 var scene=new THREE.Scene();
 scene.background=new THREE.Color(0x2a2824);
 var camera=new THREE.PerspectiveCamera(65,1,0.1,60);
@@ -126,6 +139,7 @@ function resize(){
   camera.aspect=w/h;
   camera.fov=w/h<0.8?80:65;
   camera.updateProjectionMatrix();
+  if(officeCam){officeCam.aspect=w/h;officeCam.fov=w/h<0.8?72:55;officeCam.updateProjectionMatrix()}
 }
 new ResizeObserver(resize).observe(stage); resize();
 
@@ -322,9 +336,9 @@ function addSplatTo(parent,wp,wn,size,drips){
   allSplats.push(g);
   if(allSplats.length>140){var o=allSplats.shift();if(o.parent)o.parent.remove(o)}
 }
-function burst(p){
+function burst(p,target){
   for(var i=0;i<16;i++){
-    var m=new THREE.Mesh(bitGeo,i%4===0?splatMats.yolk:splatMats.white); m.position.copy(p); scene.add(m);
+    var m=new THREE.Mesh(bitGeo,i%4===0?splatMats.yolk:splatMats.white); m.position.copy(p); (target||scene).add(m);
     bits.push({m:m,v:new V3(rand(-1.6,1.6),rand(.4,2.6),rand(-1.6,1.6)),life:rand(.5,.9)});
   }
 }
@@ -334,7 +348,7 @@ function updateBits(dt){
     var b=bits[i]; b.life-=dt; b.v.y-=9.8*dt; b.m.position.addScaledVector(b.v,dt);
     if(b.m.position.y<0.03){b.m.position.y=0.03;b.v.set(0,0,0)}
     b.m.scale.setScalar(Math.max(0.01,Math.min(1,b.life*3)));
-    if(b.life<=0){scene.remove(b.m);bits.splice(i,1)}
+    if(b.life<=0){if(b.m.parent)b.m.parent.remove(b.m);bits.splice(i,1)}
   }
   for(i=0;i<dripping.length;i++){var d=dripping[i]; if(d.m.scale.y<d.max)d.m.scale.y+=d.sp*dt}
 }
@@ -342,7 +356,7 @@ function clearSplats(){
   allSplats.forEach(function(g){if(g.parent)g.parent.remove(g)});
   allSplats.length=0; dripping.length=0; tSplats=0;
   litter.forEach(function(m){scene.remove(m)}); litter.length=0; clearCleaner();
-  bits.forEach(function(b){scene.remove(b.m)}); bits.length=0;
+  bits.forEach(function(b){if(b.m.parent)b.m.parent.remove(b.m)}); bits.length=0;
 }
 var EGG_LINES=['MY CARDIGAN!','IS THAT AN EGG?!','WHO IS THROWING EGGS?!','THAT WAS MY BREAKFAST!','YOLK ON MY TIE!'];
 function eggHitTeacher(p,head){
@@ -467,6 +481,160 @@ var T={s:'WRITE',t:0,dur:5};
 function setT(s,dur){T.s=s;T.t=0;T.dur=dur}
 var speechTimer=0;
 
+/* ---------- principal's office: a separate room with only the principal and you ---------- */
+var officeScene=new THREE.Scene(); officeScene.background=new THREE.Color(0x1d1712);
+officeCam=new THREE.PerspectiveCamera(55,1,0.1,40); officeCam.position.set(0.55,1.55,3.0); officeCam.lookAt(0,1.2,-1.1);
+resize();
+officeScene.add(new THREE.HemisphereLight(0xffe7c8,0x3a2a1c,0.95));
+var sunO=new THREE.DirectionalLight(0xffe2b0,0.7); sunO.position.set(3,3,1); sunO.castShadow=true; sunO.shadow.mapSize.set(1024,1024);
+sunO.shadow.camera.left=-5;sunO.shadow.camera.right=5;sunO.shadow.camera.top=5;sunO.shadow.camera.bottom=-5; officeScene.add(sunO);
+var lampLight=new THREE.PointLight(0xffd9a0,0.9,6); lampLight.position.set(-0.9,1.35,-0.35); officeScene.add(lampLight);
+function oplane(w,h,c,x,y,z,rx,ry,basic){
+  var m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),basic?new THREE.MeshBasicMaterial({color:c}):mat(c));
+  m.position.set(x,y,z); m.rotation.set(rx||0,ry||0,0); m.receiveShadow=true; officeScene.add(m); return m;
+}
+function labelTex(text,w,h,font,bg,fg){
+  var cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h; var x=cvs.getContext('2d');
+  x.fillStyle=bg; x.fillRect(0,0,w,h); x.fillStyle=fg; x.font=font; x.textAlign='center'; x.textBaseline='middle'; x.fillText(text,w/2,h/2);
+  return new THREE.CanvasTexture(cvs);
+}
+(function buildOffice(){
+  var O_=officeScene, i;
+  oplane(6.6,7.4,0x4a3a2a,0,0,0.2,-Math.PI/2,0);                 // floor
+  oplane(3.4,2.6,0x7a2e2e,0,0.012,0.1,-Math.PI/2,0);             // rug
+  oplane(6.6,7.4,0xe9e2d2,0,3.2,0.2,Math.PI/2,0);                // ceiling
+  oplane(6.6,3.2,0x6b4630,0,1.6,-3.4,0,0);                        // back wall
+  oplane(6.6,3.2,0x6b4630,0,1.6,3.6,0,Math.PI);
+  oplane(7.4,3.2,0x5d3d2a,-3.3,1.6,0.2,0,Math.PI/2);
+  oplane(7.4,3.2,0x5d3d2a,3.3,1.6,0.2,0,-Math.PI/2);
+  box(6.6,1.0,0.05,0x4a2f20,0,0.5,-3.37,O_);                      // wainscot
+  // window with blinds (left wall)
+  oplane(1.6,1.4,0xcfe6ff,-3.27,1.8,-1.0,0,Math.PI/2,true);
+  for(i=0;i<7;i++)box(0.02,0.06,1.65,0xe2d6bc,-3.24,1.2+i*0.2,-1.0,O_);
+  // diplomas, flag, clock
+  [-0.7,0.7].forEach(function(x){box(0.62,0.48,0.03,0x2e1d12,x,2.15,-3.36,O_);box(0.5,0.36,0.02,0xefe6c8,x,2.15,-3.34,O_)});
+  var clk=new THREE.Mesh(new THREE.CircleGeometry(0.25,24),new THREE.MeshBasicMaterial({color:0xffffff})); clk.position.set(0,2.8,-3.36); O_.add(clk);
+  box(0.02,0.18,0.01,0x222222,0,2.85,-3.35,O_); box(0.14,0.02,0.01,0x222222,0.05,2.8,-3.35,O_);
+  box(0.04,1.7,0.04,0x9a8a60,-2.4,1.6,-3.3,O_); box(0.9,0.6,0.02,0x24408a,-2.0,2.1,-3.3,O_); box(0.3,0.3,0.025,0xf2f2f2,-2.25,2.2,-3.29,O_);
+  // bookshelf
+  box(1.7,2.4,0.35,0x3a2416,2.1,1.2,-3.2,O_);
+  var bc=[0x8a2b2b,0x2b5a8a,0x2b7a4a,0xc9a23a,0x5a3a7a,0xb0b0b0];
+  for(var r=0;r<4;r++){box(1.6,0.04,0.34,0x5a3a22,2.1,0.35+r*0.6,-3.2,O_);
+    for(var k=0;k<9;k++)box(0.12,0.38+Math.random()*0.1,0.22,bc[(r*3+k)%bc.length],1.48+k*0.153,0.57+r*0.6,-3.2,O_)}
+  // plant
+  box(0.34,0.32,0.34,0x9a5a3a,2.9,0.16,1.6,O_);
+  for(i=0;i<5;i++){var lf=new THREE.Mesh(new THREE.SphereGeometry(0.2,8,6),mat(0x2f7a3c)); lf.position.set(2.9+rand(-.15,.15),0.55+i*0.12,1.6+rand(-.15,.15)); lf.castShadow=true; O_.add(lf)}
+  // big desk
+  box(2.4,0.08,0.95,0x4a2e1c,0,0.78,-0.5,O_); box(2.4,0.72,0.06,0x3a2316,0,0.4,-0.06,O_); box(0.06,0.72,0.9,0x3a2316,-1.17,0.4,-0.5,O_); box(0.06,0.72,0.9,0x3a2316,1.17,0.4,-0.5,O_);
+  box(0.58,0.11,0.05,0xc9a23a,0.7,0.88,-0.2,O_);
+  var np=new THREE.Mesh(new THREE.PlaneGeometry(0.52,0.075),new THREE.MeshBasicMaterial({map:labelTex('PRINCIPAL HARGROVE',416,60,'bold 34px sans-serif','#c9a23a','#2a1a00')})); np.position.set(0.7,0.88,-0.173); O_.add(np);
+  box(0.32,0.02,0.24,0xe0b872,-0.5,0.83,-0.2,O_);
+  var fl=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.22),new THREE.MeshBasicMaterial({map:labelTex('DISCIPLINE FILE',300,220,'bold 40px sans-serif','#e0b872','#a31515')})); fl.rotation.x=-Math.PI/2; fl.position.set(-0.5,0.842,-0.2); O_.add(fl);
+  box(0.3,0.05,0.22,0xffffff,0.5,0.85,-0.65,O_);
+  var mug=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.1,10),mat(0xdddddd)); mug.position.set(0.95,0.87,-0.5); mug.castShadow=true; O_.add(mug);
+  box(0.12,0.03,0.12,0x222222,-0.9,0.83,-0.5,O_); box(0.02,0.4,0.02,0x222222,-0.9,1.03,-0.5,O_); box(0.2,0.1,0.14,0x2c6b3a,-0.9,1.25,-0.5,O_);
+  // principal's chair
+  box(0.7,0.1,0.7,0x2a1d17,0,0.5,-1.3,O_); box(0.74,1.25,0.1,0x2a1d17,0,1.15,-1.72,O_); box(0.06,0.5,0.06,0x333333,0,0.25,-1.3,O_);
+})();
+// the principal
+var pSkin=mat(0xe8b890), pBody=new THREE.Group(), pHead=new THREE.Group();
+pBody.position.set(0,0,-1.25); officeScene.add(pBody);
+box(0.6,0.66,0.32,0x1f2a44,0,1.02,0,pBody); box(0.16,0.5,0.02,0xf2f2f2,0,1.05,0.165,pBody); box(0.08,0.46,0.02,0x8a1c1c,0,1.03,0.18,pBody);
+box(0.14,0.14,0.55,0x1f2a44,-0.32,0.9,0.3,pBody); box(0.14,0.14,0.55,0x1f2a44,0.32,0.9,0.3,pBody);
+ball(0.07,0xe8b890,-0.32,0.9,0.6,pBody); ball(0.07,0xe8b890,0.32,0.9,0.6,pBody);
+pHead.position.set(0,1.56,0); pBody.add(pHead);
+var pHeadMesh=new THREE.Mesh(new THREE.SphereGeometry(0.26,18,14),pSkin); pHeadMesh.castShadow=true; pHead.add(pHeadMesh);
+ball(0.1,0xbdbdbd,-0.24,0.0,-0.04,pHead,1.3); ball(0.1,0xbdbdbd,0.24,0.0,-0.04,pHead,1.3);   // grey hair, bald on top
+[-0.1,0.1].forEach(function(x){var g=new THREE.Mesh(new THREE.TorusGeometry(0.08,0.015,6,16),mat(0x222222)); g.position.set(x,0.03,0.24); pHead.add(g); ball(0.025,0x111111,x,0.03,0.23,pHead)});
+box(0.26,0.05,0.03,0x777777,0,0.14,0.24,pHead);                       // thick brows
+box(0.22,0.05,0.05,0x888888,0,-0.08,0.25,pHead);                      // moustache
+var pMouth=box(0.1,0.025,0.02,0x5a1f1f,0,-0.15,0.25,pHead);
+// you, seen from behind, seated facing the desk
+var sChair=new THREE.Group(); sChair.position.set(0,0,1.4); officeScene.add(sChair);
+box(0.46,0.05,0.44,0x3d6fb3,0,0.46,0,sChair); box(0.46,0.4,0.05,0x3d6fb3,0,0.72,0.2,sChair);
+[[-.2,-.18],[.2,-.18],[-.2,.18],[.2,.18]].forEach(function(l){box(0.04,0.44,0.04,0x555a63,l[0],0.22,l[1],sChair)});
+var sPlayer=makeStudent(2); sPlayer.position.set(0,0,1.4); sPlayer.rotation.y=Math.PI; officeScene.add(sPlayer);
+var sHead=sPlayer.userData.head;
+
+var O={phase:'none',t:0,dur:0,lines:[],i:0,final:false,talking:false,angry:false,blipT:0,egged:0,blame:'Dave'};
+var sendT=0, officeClock=0;
+var OFFICE_LINES={
+  1:['Ah. Take a seat.','Mr. Pemberton tells me you have been causing trouble in his class.','That is strike number one. Let us keep it that way.'],
+  2:['You again?','Two strikes already. I do not enjoy seeing you in here.','One more and it is detention.'],
+  3:['Three strikes.','I have seen enough of you.','Detention. After school. Do not argue.']
+};
+function sendToOffice(){state='sending'; sendT=1.9}
+function beginOffice(){
+  state='office'; hud.hidden=true; $('speech').textContent='';
+  O.final=strikes>=3; O.i=0; O.phase='in'; O.t=0; O.talking=false; O.angry=false; O.blame=NAMES[Math.floor(Math.random()*NAMES.length)];
+  O.lines=OFFICE_LINES[Math.min(3,strikes)].slice();
+  if(O.egged>0)O.lines.splice(1,0,'And do not say one word about the egg.');
+  if(!O.final)O.lines.push('So. What do you have to say for yourself?');
+  $('office').hidden=false; $('oline').textContent=''; $('ochoices').innerHTML='';
+  $('fade').classList.remove('on');
+}
+function showLine(t){$('oline').textContent=t}
+function goOut(){O.phase='out';O.t=0;O.talking=false;$('fade').classList.add('on')}
+function nextLine(){
+  if(O.i<O.lines.length){
+    var ln=O.lines[O.i++]; showLine(ln); O.phase='talk'; O.t=0; O.dur=Math.max(2.4,ln.length*0.05); O.talking=true;
+  }else if(O.final)goOut(); else showChoices();
+}
+function showChoices(){
+  O.phase='choice'; O.talking=false;
+  var c=$('ochoices'); c.innerHTML='';
+  [['sorry','"I am sorry. It will not happen again."'],['blame','"It was not me! It was '+O.blame+'!"'],['egg',eggs>0?'Offer him an egg (you have '+eggs+')':'Offer him an egg (you have none)']].forEach(function(o){
+    var b=document.createElement('button'); b.textContent=o[1]; b.disabled=(o[0]==='egg'&&eggs<=0);
+    b.onclick=function(e){e.stopPropagation();choose(o[0])}; c.appendChild(b);
+  });
+  c.firstChild.focus();
+}
+function eggPrincipal(){
+  SFX.crack(); O.egged++; eggs--; updateEggs();
+  pHead.getWorldPosition(headW);
+  var n=new V3(0,0.1,1).normalize();
+  addSplatTo(pHead,headW.clone().addScaledVector(n,0.27),n,rand(.13,.19),true);
+  burst(headW.clone().addScaledVector(n,0.32),officeScene);
+}
+function choose(k){
+  if(O.phase!=='choice')return; $('ochoices').innerHTML='';
+  var line;
+  if(k==='sorry')line='Good. I appreciate honesty. Back to class, and behave.';
+  else if(k==='blame'){
+    if(Math.random()<0.5){line='Hmm. I will have a word with '+O.blame+'. Back to class.'; score+=50; pop('+50 Smooth talker!')}
+    else{line='Do not blame others! That is 50 chaos points off.'; score=Math.max(0,score-50); pop('−50 Caught lying',true)}
+  }else{
+    eggPrincipal(); score+=100; pop('+100 Egged the principal!'); O.angry=true;
+    line=O.egged>1?'AGAIN?! OUT OF MY OFFICE!':'WHAT IS THAT ON MY FACE?! OUT! OUT!';
+  }
+  updateHud(); showLine(line); O.phase='reply'; O.t=0; O.dur=Math.max(2.6,line.length*0.05); O.talking=true;
+}
+function endOffice(){
+  $('office').hidden=true; hud.hidden=false;
+  state='play'; grace=2.5; cooldown=0;
+  $('fade').classList.remove('on');
+  if(O.final){endGame('detention');return}
+  setT('BACK',0.55); say('Sit down. Eyes front. And no more nonsense.',2.8); updateHud();
+}
+function updateOffice(dt){
+  O.t+=dt; officeClock+=dt;
+  var talk=O.talking;
+  pMouth.scale.y+=((talk?1+Math.abs(Math.sin(officeClock*14))*3:1)-pMouth.scale.y)*Math.min(1,dt*20);
+  if(talk){O.blipT-=dt; if(O.blipT<=0){O.blipT=0.11;tone('square',rand(110,170),rand(90,130),.05,.035)}}
+  pHead.rotation.y=Math.sin(officeClock*1.1)*0.12; pHead.rotation.x=talk?Math.sin(officeClock*5)*0.04:0;
+  pSkin.color.lerp(new THREE.Color(O.angry?0xd8503a:0xe8b890),Math.min(1,dt*5));
+  pBody.position.x=O.angry?Math.sin(officeClock*40)*0.012:0;
+  sHead.rotation.x=0.35+Math.sin(officeClock*1.6)*0.04; sHead.rotation.y=Math.sin(officeClock*0.7)*0.08;
+  officeCam.position.x=0.55+Math.sin(officeClock*0.3)*0.06; officeCam.lookAt(0,1.2,-1.1);
+  updateBits(dt);
+  if(O.phase==='in'){if(O.t>0.6)nextLine()}
+  else if(O.phase==='talk'){if(O.t>=O.dur)nextLine()}
+  else if(O.phase==='reply'){if(O.t>=O.dur)goOut()}
+  else if(O.phase==='out'){if(O.t>=0.6)endOffice()}
+}
+$('office').addEventListener('click',function(){if(O.phase==='talk'||O.phase==='reply')O.t=O.dur});
+
+
 function say(txt,secs){var el=$('speech');el.textContent=txt;speechTimer=secs||2.2}
 function pop(txt,bad){var d=document.createElement('div');d.className='pop'+(bad?' bad':'');d.textContent=txt;stage.appendChild(d);setTimeout(function(){d.remove()},1300)}
 function mult(){return Math.min(4,1+Math.floor(streak/3))}
@@ -501,10 +669,10 @@ function caught(why){
   if(grace>0)return true;
   strikes++; streak=0; score=Math.max(0,score-40); grace=2.2;
   SFX.buzz(); $('flash').classList.remove('go'); void $('flash').offsetWidth; $('flash').classList.add('go');
-  pop('Caught! −40',true); say(TEACHER_CATCH[Math.floor(Math.random()*TEACHER_CATCH.length)]+' ('+strikes+'/3)',2.4);
+  pop('Caught! −40',true); say(TEACHER_CATCH[Math.floor(Math.random()*TEACHER_CATCH.length)]+' Principal\'s office, NOW! ('+strikes+'/3)',2.4);
   if(T.s!=='WATCH'&&T.s!=='ANGRY')setT('WATCH',2.2); else T.t=Math.min(T.t,T.dur-2.0);
   updateHud();
-  if(strikes>=3)endGame('detention');
+  sendToOffice();
   return true;
 }
 
@@ -645,6 +813,12 @@ function updateStudents(dt){
 var keys={};
 function frame(now){
   var dt=Math.min(0.05,(now-(frame.last||now))/1000); frame.last=now; clock+=dt;
+  if(state==='office'){updateOffice(dt);renderer.render(officeScene,officeCam);requestAnimationFrame(frame);return}
+  if(state==='sending'){
+    sendT-=dt; if(sendT<0.5)$('fade').classList.add('on');
+    if(speechTimer>0){speechTimer-=dt;if(speechTimer<=0)$('speech').textContent=''}
+    if(sendT<=0)beginOffice();
+  }
   if(state==='play'){
     timeLeft-=dt; cooldown-=dt; eggT+=dt; if(eggT>10&&eggs<10){eggT=0;eggs++;updateEggs()} if(grace>0)grace-=dt;
     if(keys.ArrowLeft||keys.a)yaw=clamp(yaw+dt*1.6,-1.2,1.2);
@@ -675,7 +849,7 @@ function saveBest(v){try{localStorage.setItem('brm-best',String(v))}catch(e){}}
 function showStart(){
   overlay.hidden=false; hud.hidden=true;
   overlay.innerHTML='<h1>Back Row Menace</h1>'+
-  '<p>Mr. Pemberton is writing on the board. Cause chaos while his back is turned. Get seen and you earn a strike. Three strikes means detention.</p>'+
+  '<p>Mr. Pemberton is writing on the board. Cause chaos while his back is turned. Get seen and you earn a strike and a trip to the principal\'s office. Three strikes means detention.</p>'+
   '<ul><li><kbd>Space</kbd><span>Throw paper. Aim with the crosshair. Hit a classmate for 30, the teacher for 80 to 150. Paper stays where it lands.</span></li>'+
   '<li><kbd>E</kbd><span>Throw an egg. It cracks on impact and the mess stays on him, the walls and the floor. 120 to 200 points. You get 10, and one more every 10 seconds.</span></li>'+
   '<li><kbd>F</kbd><span>Whoopee cushion. 15 points and some giggles, but he might hear it.</span></li>'+
@@ -687,7 +861,7 @@ function showStart(){
 function startGame(){
   audioCtx()&&audioCtx().state==='suspended'&&audioCtx().resume();
   score=0;streak=0;strikes=0;hits=0;timeLeft=GAME_SECONDS;grace=1;cooldown=0;yaw=0;pitch=0.02;
-  balls.forEach(function(b){scene.remove(b.m)}); balls.length=0; clearSplats(); eggs=10; eggT=0; updateEggs();
+  balls.forEach(function(b){scene.remove(b.m)}); balls.length=0; clearSplats(); O.egged=0; eggs=10; eggT=0; updateEggs(); $('office').hidden=true; $('fade').classList.remove('on');
   teacher.userData.rot=Math.PI; setT('WRITE',4.5); lastStatus='';
   $('speech').textContent=''; say('…and that is why 7 x 8 is 56.',3);
   overlay.hidden=true; hud.hidden=false; state='play'; updateHud();
