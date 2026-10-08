@@ -111,6 +111,10 @@ kbd{font:800 12px var(--body);background:#3a3226;border:1px solid #5a4d3a;border
 /* keep clear of camera notches and rounded corners */
 #hud,#walk{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-top:max(6px,env(safe-area-inset-top));padding-bottom:max(6px,env(safe-area-inset-bottom))}
 #status{display:none!important}
+/* voice mode: lines are spoken instead of shown (choice buttons stay visible) */
+body.tts #speech,body.tts #oline,body.tts #office .who,body.tts .pop{display:none!important}
+body.tts #office{background:none;border:0;backdrop-filter:none;pointer-events:none;padding:0}
+body.tts #ochoices button{pointer-events:auto}
 </style>
 
 <div id="stage">
@@ -721,6 +725,45 @@ function updateGlue(dt){
   }
 }
 
+/* ---------- voice: everything is spoken instead of shown on screen ---------- */
+var TTS=('speechSynthesis' in window)&&('SpeechSynthesisUtterance' in window);
+if(TTS)document.body.classList.add('tts');
+var VOICES={}, speakingNow=false, speakUntil=0, curU=null, whoNow='P';
+function pickVoices(){
+  var vs=speechSynthesis.getVoices().filter(function(v){return /^en/i.test(v.lang)});
+  if(!vs.length)return;
+  function find(re){for(var i=0;i<vs.length;i++)if(re.test(vs[i].name))return vs[i]}
+  var fem=find(/female|samantha|zira|susan|karen|moira|victoria|google us english/i)||vs[0];
+  var mal=find(/\bmale\b|david|alex|daniel|fred|mark|google uk english male/i)||vs[vs.length-1]||vs[0];
+  VOICES={any:vs[0],teacher:mal,P:mal,D:mal,M:fem,announcer:vs[0],kid:fem};
+}
+if(TTS){try{pickVoices();speechSynthesis.onvoiceschanged=pickVoices}catch(e){}}
+function speak(text,who){
+  if(!TTS||!text)return;
+  var clean=String(text).replace(/\s+/g,' ').replace(/…/g,'...').replace(/\((\d)\/3\)/,'Strike $1.');
+  var shout=clean===clean.toUpperCase()&&/[A-Z]{3}/.test(clean);
+  var u=new SpeechSynthesisUtterance(clean);
+  var P={teacher:[0.75,1.0],P:[0.55,0.9],M:[1.5,1.05],D:[0.6,0.95],announcer:[1.15,1.15],kid:[1.4,1.1]}[who]||[1,1];
+  u.pitch=Math.min(2,P[0]+(shout?0.2:0)); u.rate=Math.min(2,P[1]*(shout?1.12:1)); u.volume=1; u.lang='en-US';
+  var v=VOICES[who]||VOICES.any; if(v)u.voice=v;
+  curU=u; speakingNow=true; speakUntil=performance.now()+clean.length*95+3500;
+  u.onend=u.onerror=function(){if(curU===u)speakingNow=false};
+  try{speechSynthesis.cancel()}catch(e){}
+  setTimeout(function(){try{speechSynthesis.speak(u)}catch(e){speakingNow=false}},40);
+}
+function isSpeaking(){return speakingNow&&performance.now()<speakUntil}
+function stopSpeech(){speakingNow=false;curU=null;try{speechSynthesis.cancel()}catch(e){}}
+function popSpeak(txt){
+  if(!TTS||isSpeaking()||/Ketchup!|Glue!/.test(txt))return;
+  speak(String(txt).replace(/\+/g,'plus ').replace(/[−-](?=\d)/g,'minus '),'announcer');
+}
+function skipLine(){
+  stopSpeech();
+  if(state==='office'){if(O.phase==='talk'||O.phase==='reply')O.t=O.dur}
+  else if(state==='parents'){if(PS.phase==='talk'||PS.phase==='sign')PS.t=PS.dur}
+}
+document.addEventListener('visibilitychange',function(){if(document.hidden)stopSpeech()});
+
 /* ---------- game state ---------- */
 var state='menu', score=0, streak=0, strikes=0, timeLeft=GAME_SECONDS, grace=0, cooldown=0, hits=0;
 var yaw=0,pitch=-0.05,clock=0;
@@ -821,10 +864,10 @@ function beginOffice(){
   O.lines=OFFICE_LINES[Math.min(3,strikes)].slice();
   if(O.egged>0)O.lines.splice(1,0,'And do not say one word about the egg.');
   if(!O.final)O.lines.push('So. What do you have to say for yourself?');
-  $('office').hidden=false; $('oline').textContent=''; $('ochoices').innerHTML=''; $('office').querySelector('.who').textContent='PRINCIPAL HARGROVE';
+  $('office').hidden=false; $('oline').textContent=''; $('ochoices').innerHTML=''; $('office').querySelector('.who').textContent='PRINCIPAL HARGROVE'; whoNow='P';
   $('fade').classList.remove('on');
 }
-function showLine(t){$('oline').textContent=t}
+function showLine(t){$('oline').textContent=t; if(whoNow==='P'||whoNow==='M'||whoNow==='D')speak(t,whoNow)}
 function goOut(){O.phase='out';O.t=0;O.talking=false;$('fade').classList.add('on')}
 function nextLine(){
   if(O.i<O.lines.length){
@@ -871,7 +914,7 @@ function updateOffice(dt){
   O.t+=dt; officeClock+=dt;
   var talk=O.talking;
   pMouth.scale.y+=((talk?1+Math.abs(Math.sin(officeClock*14))*3:1)-pMouth.scale.y)*Math.min(1,dt*20);
-  if(talk){O.blipT-=dt; if(O.blipT<=0){O.blipT=0.11;tone('square',rand(110,170),rand(90,130),.05,.035)}}
+  if(talk&&!TTS){O.blipT-=dt; if(O.blipT<=0){O.blipT=0.11;tone('square',rand(110,170),rand(90,130),.05,.035)}}
   pHead.rotation.y=Math.sin(officeClock*1.1)*0.12; pHead.rotation.x=talk?Math.sin(officeClock*5)*0.04:0;
   pSkin.color.lerp(new THREE.Color(O.angry?0xd8503a:0xe8b890),Math.min(1,dt*5));
   pBody.position.x=O.angry?Math.sin(officeClock*40)*0.012:0;
@@ -879,8 +922,8 @@ function updateOffice(dt){
   officeCam.position.x=0.55+Math.sin(officeClock*0.3)*0.06; officeCam.lookAt(0,1.2,-1.1);
   updateBits(dt);
   if(O.phase==='in'){if(O.t>0.6)nextLine()}
-  else if(O.phase==='talk'){if(O.t>=O.dur)nextLine()}
-  else if(O.phase==='reply'){if(O.t>=O.dur)goOut()}
+  else if(O.phase==='talk'){if(O.t>=O.dur&&!isSpeaking())nextLine()}
+  else if(O.phase==='reply'){if(O.t>=O.dur&&!isSpeaking())goOut()}
   else if(O.phase==='out'){if(O.t>=0.6){if(O.final)beginParents();else endParents()}}
 }
 $('office').addEventListener('click',function(){
@@ -984,7 +1027,7 @@ dad.scale.setScalar(1.06);
 
 var PS={phase:'none',t:0,dur:0,i:0,lines:[],talker:'',eggedShown:0,arrived:false,blipT:0,clock:0};
 var WHO={P:'PRINCIPAL HARGROVE',M:'MUM',D:'DAD',N:''};
-function setWho(w){$('office').querySelector('.who').textContent=WHO[w]||''}
+function setWho(w){whoNow=w; $('office').querySelector('.who').textContent=WHO[w]||''}
 function parentLines(){
   var n=Math.min(3,strikes), L=[];
   L.push(['P','Thank you both for coming down to the school. Your child has been causing trouble in class.']);
@@ -1038,7 +1081,7 @@ function updateParents(dt){
   var tk=PS.talker;
   function mouth(m,on){m.scale.y+=((on?1+Math.abs(Math.sin(c*14))*3:1)-m.scale.y)*Math.min(1,dt*20)}
   mouth(pr3Mouth,tk==='P'); mouth(mu.mouth,tk==='M'); mouth(du.mouth,tk==='D');
-  if(tk==='P'||tk==='M'||tk==='D'){PS.blipT-=dt;if(PS.blipT<=0){PS.blipT=0.11;var f=tk==='M'?rand(230,300):tk==='D'?rand(90,130):rand(110,170);tone('square',f,f*0.8,.05,.035)}}
+  if(!TTS&&(tk==='P'||tk==='M'||tk==='D')){PS.blipT-=dt;if(PS.blipT<=0){PS.blipT=0.11;var f=tk==='M'?rand(230,300):tk==='D'?rand(90,130):rand(110,170);tone('square',f,f*0.8,.05,.035)}}
   pr3Head.rotation.y=Math.sin(c*1.1)*0.1;
   sP3.userData.head.rotation.y=Math.sin(c*0.7)*0.08; sP3.userData.head.rotation.x=0.35+Math.sin(c*1.6)*0.04;
   parentCam.position.x=0.4+Math.sin(c*0.3)*0.06; parentCam.lookAt(0.3,1.15,-1.4);
@@ -1047,7 +1090,7 @@ function updateParents(dt){
   else if(PS.phase==='walk'){
     var a=walkAdult(mum,dt), b=walkAdult(dad,dt);
     if(a&&b){turnTo(mum,Math.PI,dt);turnTo(dad,Math.PI,dt)}
-    if(a&&b&&PS.t>2.5&&Math.abs(Math.atan2(Math.sin(mum.rotation.y-Math.PI),Math.cos(mum.rotation.y-Math.PI)))<0.1){PS.arrived=true;nextPLine()}
+    if(a&&b&&PS.t>2.5&&!isSpeaking()&&Math.abs(Math.atan2(Math.sin(mum.rotation.y-Math.PI),Math.cos(mum.rotation.y-Math.PI)))<0.1){PS.arrived=true;nextPLine()}
   }else if(PS.arrived&&PS.phase!=='out'||PS.phase==='out'){
     // after arriving: both face the counter, or turn to glare at the student while scolding
     var scold=(tk==='M'||tk==='D');
@@ -1059,7 +1102,7 @@ function updateParents(dt){
       redrawSheet(p,PS.t>PS.dur*0.85);
       if(p<1&&Math.random()<0.4)tone('sawtooth',rand(600,900),rand(450,650),.04,.02);
     }else{mu.armR.rotation.set(0,0,0);mu.pen.visible=false;mu.head.rotation.x=0}
-    if(PS.phase==='talk'){if(PS.t>=PS.dur)nextPLine()}
+    if(PS.phase==='talk'){if(PS.t>=PS.dur&&!isSpeaking())nextPLine()}
     else if(PS.phase==='sign'){if(PS.t>=PS.dur){tone('triangle',700,900,.2,.15);nextPLine()}}
     else if(PS.phase==='out'){if(PS.t>=0.6)endParents()}
   }
@@ -1067,8 +1110,8 @@ function updateParents(dt){
 
 
 
-function say(txt,secs){var el=$('speech');el.textContent=txt;speechTimer=secs||2.2}
-function pop(txt,bad){var d=document.createElement('div');d.className='pop'+(bad?' bad':'');d.textContent=txt;stage.appendChild(d);setTimeout(function(){d.remove()},1300)}
+function say(txt,secs){var el=$('speech');el.textContent=txt;speechTimer=secs||2.2;speak(txt,'teacher')}
+function pop(txt,bad){popSpeak(txt);var d=document.createElement('div');d.className='pop'+(bad?' bad':'');d.textContent=txt;stage.appendChild(d);setTimeout(function(){d.remove()},1300)}
 function mult(){return Math.min(4,1+Math.floor(streak/3))}
 function addScore(base,label){
   var pts=base*mult()*(dark?2:1); score+=pts; streak++;
@@ -1322,7 +1365,7 @@ function showStart(){
   '<li><kbd>K</kbd><span>Hold to spray ketchup. It sticks to everything and keeps you busy, but he will notice if you soak him.</span></li>'+
   '<li><kbd>F</kbd><span>Whoopee cushion. 15 points and some giggles, but he might hear it.</span></li>'+
   '<li><kbd>H</kbd><span>Air horn. 60 points, but he always turns around.</span></li></ul>'+
-  '<p><span style="color:var(--dim)">Drag or use arrow keys to look around. The teacher sends a student with a mop to clean floor and wall mess, but the egg on him stays. Keep your eyes on the teacher. Three clean successes in a row raise your multiplier.</span></p>'+
+  '<p><span style="color:var(--dim)">Drag or use arrow keys to look around. The teacher sends a student with a mop to clean floor and wall mess, but the egg on him stays. Keep your eyes on the teacher and listen: everything is spoken aloud, so turn your sound on. Three clean successes in a row raise your multiplier.</span></p>'+
   '<p><button id="go">Start class</button></p>'+(best()?'<p style="color:var(--dim)">Best chaos: '+best()+'</p>':'');
   $('go').onclick=startGame; $('go').focus({preventScroll:true});
 }
@@ -1345,6 +1388,7 @@ function endGame(why){
    '<div class="big">'+score+'</div><p class="lbl">chaos points</p>'+
    '<p>Rank: <b>'+rank+'</b><br><span style="color:var(--dim)">Teacher hits: '+hits+' · Strikes: '+strikes+'/3'+(nb&&score>0?' · New best!':(prev?' · Best: '+prev:''))+'</span></p>'+
    '<p><button id="go">Play again</button></p>';
+  speak((why==='detention'?'Detention! Three strikes. Mr. Pemberton wants a word with you. ':'The bell rings! You made it to the end of class. ')+'Your rank: '+rank+'. '+score+' chaos points.','announcer');
   $('go').onclick=startGame; $('go').focus({preventScroll:true});
 }
 
@@ -1363,7 +1407,7 @@ cv.addEventListener('pointermove',function(e){
   if(!drag)return; var dx=e.clientX-drag.x,dy=e.clientY-drag.y; drag.x=e.clientX;drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
   yaw=clamp(yaw-dx*0.004,-1.2,1.2); pitch=clamp(pitch-dy*0.003,-0.6,0.5);
 });
-cv.addEventListener('pointerup',function(){if(drag&&drag.moved<6&&state==='play')throwPaper(); drag=null});
+cv.addEventListener('pointerup',function(){if(drag&&drag.moved<6){if(state==='play')throwPaper(); else if(state==='office'||state==='parents')skipLine()} drag=null});
 cv.addEventListener('pointercancel',function(){drag=null});
 window.addEventListener('keydown',function(e){
   var k=e.key.length===1?e.key.toLowerCase():e.key; keys[k]=true;
