@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fire Fighter</title>
+<style>
+/* Layout: one portrait play field, centred, as wide as the screen allows but never wider than 0.62 of its height. */
+:root {
+  --night: #1b2440;
+  --ember: #ff4a12;
+  --water: #6ec6ff;
+  --grass: #2e4a2e;
+  --text: #ffffff;
+  --font-ui: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--night); color: var(--text); font-family: var(--font-ui); overflow: hidden; }
+#wrap { height: 100%; display: flex; justify-content: center; align-items: stretch; }
+canvas { display: block; height: 100%; width: min(100%, 62svh); touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" aria-label="Fire Fighter game. Touch and drag to spray water on the burning house."></canvas></div>
+<script>
+(function () {
+  var canvas = document.getElementById('game');
+  var ctx = canvas.getContext('2d');
+  var W = 360, H = 640, u = 1, dpr = 1;
+
+  var fires = [], drops = [];
+  var state = 'start';           // start | playing | won | lost
+  var level = 1, spawned = 0, totalFires = 6, spawnTimer = 0;
+  var health = 100, spraying = false, tx = 0, ty = 0;
+  var last = 0, clock = 0;
+
+  function resize() {
+    var r = canvas.getBoundingClientRect();
+    W = r.width; H = r.height;
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    u = W / 360;
+  }
+  window.addEventListener('resize', resize);
+
+  function startLevel() {
+    fires = []; drops = [];
+    spawned = 0;
+    totalFires = 4 + level * 2;
+    spawnTimer = 0.5;
+    health = 100;
+    state = 'playing';
+    spraying = false;
+  }
+
+  function spawnFire() {
+    var y = H * (0.30 + Math.random() * 0.45);
+    var half = y < H * 0.40 ? 0.12 : 0.28;
+    fires.push({ x: W * (0.5 - half + Math.random() * half * 2), y: y, r: 14 * u });
+    spawned++;
+  }
+
+  function update(dt) {
+    clock += dt;
+    spawnTimer -= dt;
+    if (spawnTimer <= 0 && spawned < totalFires) {
+      spawnFire();
+      spawnTimer = Math.max(1.0, 3.0 - 0.25 * level);
+    }
+
+    var size = 0;
+    fires.forEach(function (f) {
+      f.r = Math.min(f.r + (3 + level) * u * dt, 50 * u);
+      size += f.r / u;
+    });
+    health -= size * 0.012 * dt;
+
+    if (spraying) {
+      var nx = W / 2, ny = H * 0.95;
+      var dx = tx - nx, dy = ty - ny;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 1) {
+        var speed = 700 * u;
+        for (var i = 0; i < 3; i++) {
+          var wob = (Math.random() - 0.5) * 0.18;
+          var c = Math.cos(wob), s = Math.sin(wob);
+          var ux = dx / dist, uy = dy / dist;
+          drops.push({
+            x: nx, y: ny,
+            vx: (ux * c - uy * s) * speed,
+            vy: (ux * s + uy * c) * speed,
+            life: dist / speed + 0.05
+          });
+        }
+      }
+    }
+
+    drops = drops.filter(function (d) {
+      d.x += d.vx * dt; d.y += d.vy * dt; d.life -= dt;
+      if (d.life <= 0) return false;
+      for (var i = 0; i < fires.length; i++) {
+        var f = fires[i], ddx = d.x - f.x, ddy = d.y - f.y;
+        if (ddx * ddx + ddy * ddy < f.r * f.r) { f.r -= 0.3 * u; return false; }
+      }
+      return true;
+    });
+    fires = fires.filter(function (f) { return f.r >= 5 * u; });
+
+    if (health <= 0) { health = 0; state = 'lost'; spraying = false; }
+    else if (spawned >= totalFires && fires.length === 0) { state = 'won'; spraying = false; }
+  }
+
+  function flame(x, y, r) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - 1.6 * r);
+    ctx.bezierCurveTo(x + 1.2 * r, y - 0.4 * r, x + 0.9 * r, y + r, x, y + r);
+    ctx.bezierCurveTo(x - 0.9 * r, y + r, x - 1.2 * r, y - 0.4 * r, x, y - 1.6 * r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function rect(c, x0, y0, x1, y1) { ctx.fillStyle = c; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#1b2440'; ctx.fillRect(0, 0, W, H);
+
+    // stars
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    for (var i = 0; i < 24; i++) {
+      var sx = (i * 97 % 100) / 100 * W, sy = (i * 53 % 100) / 100 * H * 0.35;
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+
+    rect('#2e4a2e', 0, H * 0.80, W, H);
+
+    var sh = Math.floor(0x90 * (health / 100) + 0x30);
+    ctx.fillStyle = 'rgb(' + sh + ',' + Math.floor(sh * 0.75) + ',' + Math.floor(sh * 0.5) + ')';
+    ctx.fillRect(W * 0.15, H * 0.40, W * 0.70, H * 0.40);
+
+    ctx.fillStyle = '#5a2a2a';
+    ctx.beginPath();
+    ctx.moveTo(W * 0.10, H * 0.40); ctx.lineTo(W * 0.50, H * 0.22); ctx.lineTo(W * 0.90, H * 0.40);
+    ctx.closePath(); ctx.fill();
+
+    var win = '#ffd27a';
+    rect(win, W * 0.22, H * 0.46, W * 0.38, H * 0.55);
+    rect(win, W * 0.62, H * 0.46, W * 0.78, H * 0.55);
+    rect(win, W * 0.22, H * 0.60, W * 0.38, H * 0.69);
+    rect(win, W * 0.62, H * 0.60, W * 0.78, H * 0.69);
+    rect('#3a2414', W * 0.44, H * 0.64, W * 0.56, H * 0.80);
+
+    fires.forEach(function (f) {
+      var r = f.r * (1 + 0.12 * Math.sin(clock * 14 + f.x));
+      ctx.fillStyle = '#ff4a12'; flame(f.x, f.y, r);
+      ctx.fillStyle = '#ffb020'; flame(f.x, f.y + r * 0.1, r * 0.7);
+      ctx.fillStyle = '#fff0a0'; flame(f.x, f.y + r * 0.2, r * 0.4);
+    });
+
+    rect('#444', W / 2 - 8 * u, H * 0.95 - 4 * u, W / 2 + 8 * u, H);
+    ctx.fillStyle = '#6ec6ff';
+    drops.forEach(function (d) { ctx.beginPath(); ctx.arc(d.x, d.y, 3.5 * u, 0, 6.2832); ctx.fill(); });
+
+    hud();
+    if (state === 'start') overlay('Fire Fighter', 'The house is on fire! Touch and drag to spray water.', 'Tap to start');
+    else if (state === 'won') overlay('House saved!', 'Level ' + level + ' complete.', 'Tap for level ' + (level + 1));
+    else if (state === 'lost') overlay('House burned down', 'You reached level ' + level + '.', 'Tap to try again');
+  }
+
+  function hud() {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold ' + 18 * u + 'px "Trebuchet MS", system-ui, sans-serif';
+    ctx.textAlign = 'left'; ctx.fillText('Level ' + level, 12 * u, 30 * u);
+    ctx.textAlign = 'right';
+    ctx.fillText('Fires left: ' + (totalFires - spawned + fires.length), W - 12 * u, 30 * u);
+    var bx = 12 * u, by = 42 * u, bw = W - 24 * u, bh = 12 * u;
+    ctx.fillStyle = '#333'; ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = health > 30 ? '#4cd964' : '#ff3b30';
+    ctx.fillRect(bx, by, bw * health / 100, bh);
+  }
+
+  function overlay(title, sub, action) {
+    ctx.fillStyle = 'rgba(0,0,0,0.67)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+    ctx.font = 'bold ' + 32 * u + 'px "Trebuchet MS", system-ui, sans-serif';
+    ctx.fillText(title, W / 2, H * 0.42);
+    ctx.font = 15 * u + 'px "Trebuchet MS", system-ui, sans-serif';
+    ctx.fillText(sub, W / 2, H * 0.48, W - 32);
+    ctx.fillStyle = '#ffb020';
+    ctx.font = 'bold ' + 20 * u + 'px "Trebuchet MS", system-ui, sans-serif';
+    ctx.fillText(action, W / 2, H * 0.56);
+  }
+
+  function frame(now) {
+    var dt = last ? Math.min((now - last) / 1000, 0.05) : 0;
+    last = now;
+    if (state === 'playing') update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  function pos(e) {
+    var r = canvas.getBoundingClientRect();
+    tx = e.clientX - r.left; ty = e.clientY - r.top;
+  }
+  canvas.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    if (state !== 'playing') {
+      if (state === 'lost') level = 1; else if (state === 'won') level++;
+      startLevel();
+      return;
+    }
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    pos(e); spraying = true;
+  });
+  canvas.addEventListener('pointermove', function (e) { if (spraying) pos(e); });
+  ['pointerup', 'pointercancel'].forEach(function (n) {
+    canvas.addEventListener(n, function () { spraying = false; });
+  });
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

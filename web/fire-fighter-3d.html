@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fire Fighter 3D</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&display=swap">
+<style>
+/* Layout: full-screen 3D scene, HUD pinned at the top, a centred card for start / win / lose. Single dark night look by choice. */
+:root {
+  --night: #1b2440;
+  --ember: #ff4a12;
+  --flame: #ffb020;
+  --water: #6ec6ff;
+  --text: #ffffff;
+  --panel: rgba(8, 12, 28, 0.78);
+  --good: #4cd964;
+  --bad: #ff3b30;
+  --font-display: "Bungee", "Impact", "Arial Black", sans-serif;
+  --font-ui: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--night); color: var(--text); font-family: var(--font-ui); overflow: hidden; }
+#wrap { position: relative; height: 100%; }
+#wrap canvas { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+#hud { position: absolute; top: 0; left: 0; right: 0; padding: 12px 16px; display: grid; gap: 8px; pointer-events: none; }
+#hud .row { display: flex; justify-content: space-between; gap: 12px; font-family: var(--font-display); font-size: 1.05rem; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+#bar { height: 12px; background: rgba(255,255,255,.18); border-radius: 6px; overflow: hidden; }
+#fill { height: 100%; width: 100%; background: var(--good); transition: background .2s; }
+#hint { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; padding: 0 16px; font-size: .95rem; text-shadow: 0 2px 6px rgba(0,0,0,.7); pointer-events: none; }
+#overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.55); cursor: pointer; }
+#card { background: var(--panel); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 24px 22px; max-width: 360px; width: 100%; text-align: center; display: grid; gap: 10px; }
+#card h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 2rem; line-height: 1.1; text-wrap: balance; }
+#card p { margin: 0; line-height: 1.4; }
+#card .go { margin-top: 6px; font-family: var(--font-display); color: var(--flame); font-size: 1.15rem; }
+#fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="row"><span id="lvl">Level 1</span><span id="left">Fires left: 0</span></div>
+    <div id="bar"><div id="fill"></div></div>
+  </div>
+  <div id="hint" hidden>Touch and drag to spray water</div>
+  <div id="overlay">
+    <div id="card">
+      <h1 id="ttl">Fire Fighter 3D</h1>
+      <p id="sub">The house is on fire! Touch and drag to aim the hose. Put out every fire before the house burns down.</p>
+      <div class="go" id="go">Tap to start</div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var wrap = document.getElementById('wrap');
+  if (!window.THREE) {
+    wrap.insertAdjacentHTML('beforeend', '<div id="fallback">The 3D engine could not load. Check your connection and reload.</div>');
+    return;
+  }
+
+  // World units: the house is 8 wide. U converts the 2D version's numbers into this scale.
+  var U = 0.0317;
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  wrap.insertBefore(renderer.domElement, wrap.firstChild);
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1b2440);
+  scene.fog = new THREE.Fog(0x1b2440, 22, 55);
+  var camera = new THREE.PerspectiveCamera(50, 1, 0.1, 120);
+
+  scene.add(new THREE.AmbientLight(0x98a2d4, 0.85));
+  var moon = new THREE.DirectionalLight(0xbac6ff, 0.7);
+  moon.position.set(-6, 12, 9);
+  scene.add(moon);
+  var fireLight = new THREE.PointLight(0xff6a20, 0, 16, 1.6);
+  fireLight.position.set(0, 3, 3);
+  scene.add(fireLight);
+
+  // ground
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), new THREE.MeshLambertMaterial({ color: 0x2e4a2e }));
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // house (front face sits on the z = 0 plane)
+  var wallMat = new THREE.MeshLambertMaterial({ color: 0xa07850 });
+  var walls = new THREE.Mesh(new THREE.BoxGeometry(8, 4.5, 5), wallMat);
+  walls.position.set(0, 2.25, -2.5);
+  scene.add(walls);
+
+  var roofGeo = new THREE.ConeGeometry(4.6, 2.6, 4);
+  roofGeo.rotateY(Math.PI / 4);
+  var roof = new THREE.Mesh(roofGeo, new THREE.MeshLambertMaterial({ color: 0x5a2a2a }));
+  roof.scale.set(1.38, 1, 0.92);
+  roof.position.set(0, 5.8, -2.5);
+  scene.add(roof);
+
+  var chimney = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.8, 0.9), new THREE.MeshLambertMaterial({ color: 0x6b3d2e }));
+  chimney.position.set(2.4, 6.0, -3);
+  scene.add(chimney);
+
+  var winMat = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+  [[-2.3, 3.5], [2.3, 3.5], [-2.3, 1.9], [2.3, 1.9]].forEach(function (p) {
+    var w = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.1), winMat);
+    w.position.set(p[0], p[1], 0.03);
+    scene.add(w);
+  });
+  var door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.12), new THREE.MeshLambertMaterial({ color: 0x3a2414 }));
+  door.position.set(0, 1.1, 0.04);
+  scene.add(door);
+
+  // trees for depth
+  [[-8, -3], [9, -4], [-11, -9], [12, -10], [-6.5, 4], [7.5, 3]].forEach(function (p) {
+    var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.2, 6), new THREE.MeshLambertMaterial({ color: 0x4a3322 }));
+    trunk.position.set(p[0], 0.6, p[1]);
+    var top = new THREE.Mesh(new THREE.ConeGeometry(1.1, 3, 7), new THREE.MeshLambertMaterial({ color: 0x1f4a2a }));
+    top.position.set(p[0], 2.5, p[1]);
+    scene.add(trunk); scene.add(top);
+  });
+
+  // stars
+  var starPos = new Float32Array(300 * 3);
+  for (var s = 0; s < 300; s++) {
+    starPos[s * 3] = (Math.random() - 0.5) * 120;
+    starPos[s * 3 + 1] = 12 + Math.random() * 35;
+    starPos[s * 3 + 2] = -30 - Math.random() * 30;
+  }
+  var starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.35, fog: false })));
+
+  // hose nozzle
+  var nozzleGeo = new THREE.CylinderGeometry(0.16, 0.26, 1.1, 10);
+  nozzleGeo.rotateX(Math.PI / 2);
+  var nozzle = new THREE.Mesh(nozzleGeo, new THREE.MeshLambertMaterial({ color: 0xc9ccd4 }));
+  scene.add(nozzle);
+  var hoseBase = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.7), new THREE.MeshLambertMaterial({ color: 0x444a58 }));
+  scene.add(hoseBase);
+
+  // water drops (pooled)
+  var dropGeo = new THREE.SphereGeometry(0.08, 6, 6);
+  var dropMat = new THREE.MeshBasicMaterial({ color: 0x6ec6ff });
+  var POOL = 420;
+  var drops = [];
+  for (var d = 0; d < POOL; d++) {
+    var m = new THREE.Mesh(dropGeo, dropMat);
+    m.visible = false;
+    scene.add(m);
+    drops.push({ mesh: m, alive: false, vx: 0, vy: 0, vz: 0, life: 0 });
+  }
+
+  // fires
+  var fires = [];
+  var flameGeo = new THREE.ConeGeometry(0.7, 2.2, 10);
+  function makeFlame() {
+    var g = new THREE.Group();
+    [[0xff4a12, 1, 0.92], [0xffb020, 0.66, 0.95], [0xfff0a0, 0.36, 1]].forEach(function (c, i) {
+      var mesh = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: c[0], transparent: true, opacity: c[2], depthWrite: false }));
+      mesh.renderOrder = i + 1; // inner layers draw last so they show on top of the outer flame
+      mesh.scale.set(c[1], c[1], c[1]);
+      mesh.position.y = 0.7 * c[1];
+      g.add(mesh);
+    });
+    return g;
+  }
+
+  // game state
+  var state = 'start';           // start | playing | won | lost
+  var level = 1, spawned = 0, totalFires = 6, spawnTimer = 0;
+  var health = 100, spraying = false;
+  var ndc = new THREE.Vector2(), target = new THREE.Vector3(0, 3, 0.35);
+  var emitAcc = 0, clock = 0, lastT = 0;
+  var raycaster = new THREE.Raycaster();
+  var aimPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.35);
+  var tmp = new THREE.Vector3(), nozzlePos = new THREE.Vector3();
+
+  var el = {
+    lvl: document.getElementById('lvl'), left: document.getElementById('left'),
+    fill: document.getElementById('fill'), overlay: document.getElementById('overlay'),
+    ttl: document.getElementById('ttl'), sub: document.getElementById('sub'),
+    go: document.getElementById('go'), hint: document.getElementById('hint')
+  };
+
+  function resize() {
+    var w = wrap.clientWidth || 360, h = wrap.clientHeight || 640;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    var t = Math.tan(camera.fov * Math.PI / 360);
+    // fit a 12-wide, 9-tall view of the house
+    var dist = Math.max(6 / (t * camera.aspect), 4.5 / t);
+    camera.position.set(0, 3.6, dist);
+    camera.updateProjectionMatrix();
+    nozzlePos.set(0, 0.45, dist - 6.2);
+    nozzle.position.copy(nozzlePos);
+    hoseBase.position.set(0, 0.2, nozzlePos.z + 0.2);
+  }
+  window.addEventListener('resize', resize);
+
+  function startLevel() {
+    fires.forEach(function (f) { scene.remove(f.group); });
+    fires = [];
+    drops.forEach(function (dr) { dr.alive = false; dr.mesh.visible = false; });
+    spawned = 0;
+    totalFires = 4 + level * 2;
+    spawnTimer = 0.5;
+    health = 100;
+    spraying = false;
+    state = 'playing';
+    el.overlay.hidden = true;
+    el.hint.hidden = !(level === 1);
+  }
+
+  function spawnFire() {
+    var y = 0.8 + Math.random() * 4.5;
+    var half = y > 4.5 ? 1.2 : 3.4;
+    var g = makeFlame();
+    var f = { group: g, x: (Math.random() * 2 - 1) * half, y: y, z: 0.4, r: 14 * U, ph: Math.random() * 6 };
+    g.position.set(f.x, f.y, f.z);
+    scene.add(g);
+    fires.push(f);
+    spawned++;
+  }
+
+  function emitDrop() {
+    for (var i = 0; i < POOL; i++) {
+      var dr = drops[i];
+      if (dr.alive) continue;
+      tmp.copy(target).sub(nozzlePos);
+      var dist = tmp.length();
+      tmp.normalize();
+      var speed = 22;
+      dr.vx = (tmp.x + (Math.random() - 0.5) * 0.07) * speed;
+      dr.vy = (tmp.y + (Math.random() - 0.5) * 0.07) * speed;
+      dr.vz = (tmp.z + (Math.random() - 0.5) * 0.07) * speed;
+      dr.life = dist / speed + 0.05;
+      dr.mesh.position.copy(nozzlePos);
+      dr.mesh.visible = true;
+      dr.alive = true;
+      return;
+    }
+  }
+
+  function updateAim() {
+    camera.updateMatrixWorld();
+    raycaster.setFromCamera(ndc, camera);
+    if (raycaster.ray.intersectPlane(aimPlane, tmp)) target.copy(tmp);
+  }
+
+  function update(dt) {
+    clock += dt;
+    spawnTimer -= dt;
+    if (spawnTimer <= 0 && spawned < totalFires) {
+      spawnFire();
+      spawnTimer = Math.max(1.0, 3.0 - 0.25 * level);
+    }
+
+    var size = 0;
+    fires.forEach(function (f) {
+      f.r = Math.min(f.r + (3 + level) * U * dt, 50 * U);
+      size += f.r / U;
+    });
+    health -= size * 0.012 * dt;
+
+    if (spraying) {
+      updateAim();
+      emitAcc += 180 * dt;
+      while (emitAcc >= 1) { emitAcc -= 1; emitDrop(); }
+    }
+
+    drops.forEach(function (dr) {
+      if (!dr.alive) return;
+      var p = dr.mesh.position;
+      p.x += dr.vx * dt; p.y += dr.vy * dt; p.z += dr.vz * dt;
+      dr.life -= dt;
+      var dead = dr.life <= 0;
+      if (!dead) {
+        for (var i = 0; i < fires.length; i++) {
+          var f = fires[i];
+          var dx = p.x - f.x, dy = p.y - (f.y + f.r), dz = p.z - f.z;
+          var hr = f.r + 0.2;
+          if (dx * dx + dy * dy + dz * dz < hr * hr) { f.r -= 0.3 * U; dead = true; break; }
+        }
+      }
+      if (dead) { dr.alive = false; dr.mesh.visible = false; }
+    });
+
+    fires = fires.filter(function (f) {
+      if (f.r < 5 * U) { scene.remove(f.group); return false; }
+      return true;
+    });
+
+    if (health <= 0) { health = 0; end('lost'); }
+    else if (spawned >= totalFires && fires.length === 0) { end('won'); }
+  }
+
+  function end(result) {
+    state = result;
+    spraying = false;
+    el.hint.hidden = true;
+    el.overlay.hidden = false;
+    if (result === 'won') {
+      el.ttl.textContent = 'House saved!';
+      el.sub.textContent = 'Level ' + level + ' complete.';
+      el.go.textContent = 'Tap for level ' + (level + 1);
+    } else {
+      el.ttl.textContent = 'House burned down';
+      el.sub.textContent = 'You reached level ' + level + '.';
+      el.go.textContent = 'Tap to try again';
+    }
+  }
+
+  function render() {
+    // flicker + sway
+    fires.forEach(function (f) {
+      var s = f.r / 0.7;
+      var fl = Math.sin(clock * 14 + f.ph);
+      f.group.scale.set(s * (1 + 0.1 * fl), s * (1 + 0.16 * Math.sin(clock * 11 + f.ph * 2)), s * (1 + 0.1 * fl));
+      f.group.rotation.y = clock * 2 + f.ph;
+    });
+
+    // glow of the burning house on the ground and walls
+    var amount = 0, cx = 0, cy = 0;
+    fires.forEach(function (f) { amount += f.r; cx += f.x; cy += f.y; });
+    if (fires.length) { fireLight.position.set(cx / fires.length, cy / fires.length, 2.2); }
+    fireLight.intensity = Math.min(2.4, amount * 0.9);
+
+    // charring walls
+    var k = health / 100;
+    wallMat.color.setRGB(0.16 + 0.47 * k, 0.11 + 0.36 * k, 0.07 + 0.25 * k);
+
+    // aim the nozzle
+    tmp.copy(spraying ? target : new THREE.Vector3(0, 3, 0));
+    nozzle.lookAt(tmp);
+
+    // camera sway
+    camera.position.x = Math.sin(clock * 0.35) * 0.5;
+    camera.lookAt(0, 3.2, 0);
+
+    // HUD
+    el.lvl.textContent = 'Level ' + level;
+    el.left.textContent = 'Fires left: ' + (totalFires - spawned + fires.length);
+    el.fill.style.width = health + '%';
+    el.fill.style.background = health > 30 ? 'var(--good)' : 'var(--bad)';
+
+    renderer.render(scene, camera);
+  }
+
+  function frame(now) {
+    var dt = lastT ? Math.min((now - lastT) / 1000, 0.05) : 0;
+    lastT = now;
+    if (state === 'playing') update(dt); else clock += dt;
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  function setPointer(e) {
+    var r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    updateAim();
+  }
+  var cv = renderer.domElement;
+  cv.addEventListener('pointerdown', function (e) {
+    if (state !== 'playing') return;
+    e.preventDefault();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    el.hint.hidden = true;
+    setPointer(e); spraying = true;
+  });
+  cv.addEventListener('pointermove', function (e) { if (spraying) setPointer(e); });
+  ['pointerup', 'pointercancel'].forEach(function (n) {
+    cv.addEventListener(n, function () { spraying = false; });
+  });
+  el.overlay.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    if (state === 'lost') level = 1; else if (state === 'won') level++;
+    startLevel();
+  });
+
+  resize();
+  requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
