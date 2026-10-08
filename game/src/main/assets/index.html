@@ -110,6 +110,7 @@ kbd{font:800 12px var(--body);background:#3a3226;border:1px solid #5a4d3a;border
 @media (max-width:360px){#overlay h1{font-size:30px}.brand svg{width:48px;height:48px}}
 /* keep clear of camera notches and rounded corners */
 #hud,#walk{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-top:max(6px,env(safe-area-inset-top));padding-bottom:max(6px,env(safe-area-inset-bottom))}
+#status{display:none!important}
 </style>
 
 <div id="stage">
@@ -1321,7 +1322,7 @@ function showStart(){
   '<li><kbd>K</kbd><span>Hold to spray ketchup. It sticks to everything and keeps you busy, but he will notice if you soak him.</span></li>'+
   '<li><kbd>F</kbd><span>Whoopee cushion. 15 points and some giggles, but he might hear it.</span></li>'+
   '<li><kbd>H</kbd><span>Air horn. 60 points, but he always turns around.</span></li></ul>'+
-  '<p><span style="color:var(--dim)">Drag or use arrow keys to look around. The teacher sends a student with a mop to clean floor and wall mess, but the egg on him stays. Watch the status light at the top. Three clean successes in a row raise your multiplier.</span></p>'+
+  '<p><span style="color:var(--dim)">Drag or use arrow keys to look around. The teacher sends a student with a mop to clean floor and wall mess, but the egg on him stays. Keep your eyes on the teacher. Three clean successes in a row raise your multiplier.</span></p>'+
   '<p><button id="go">Start class</button></p>'+(best()?'<p style="color:var(--dim)">Best chaos: '+best()+'</p>':'');
   $('go').onclick=startGame; $('go').focus({preventScroll:true});
 }
