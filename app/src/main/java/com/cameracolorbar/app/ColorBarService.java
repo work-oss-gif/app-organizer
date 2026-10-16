@@ -54,6 +54,7 @@ public class ColorBarService extends Service {
     static final String ACTION_STOP = "com.cameracolorbar.app.STOP";
     static final String PREFS = "settings";
     static final String KEY_OPACITY = "opacity"; // 10..100 (percent)
+    static final String KEY_AUTOSTART = "autostart"; // start when the tablet turns on
     private static final String CHANNEL_ID = "colorbar";
     private static final long FRAME_GAP_MS = 150;
 

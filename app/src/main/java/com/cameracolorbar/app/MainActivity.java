@@ -13,6 +13,8 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -29,9 +31,13 @@ import java.util.List;
  */
 public class MainActivity extends Activity {
 
+    static final String EXTRA_AUTOSTART = "autostart";
+
     private static final int REQ_PERMS = 1;
     private float density;
     private TextView statusText;
+    /** True when the tablet just turned on and BootReceiver opened us only to start the bar. */
+    private boolean autostartMode = false;
 
     private int dp(float v) {
         return (int) (v * density);
@@ -41,6 +47,12 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         density = getResources().getDisplayMetrics().density;
+
+        if (getIntent() != null && getIntent().getBooleanExtra(EXTRA_AUTOSTART, false)) {
+            // Started by BootReceiver: no screen needed. onResume starts the bar and closes us.
+            autostartMode = true;
+            return;
+        }
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout col = new LinearLayout(this);
@@ -100,6 +112,19 @@ public class MainActivity extends Activity {
         });
         col.addView(slider);
 
+        // ---- Auto-start checkbox ----
+        CheckBox auto = new CheckBox(this);
+        auto.setText("Start automatically when the tablet turns on");
+        auto.setTextSize(15);
+        auto.setChecked(prefs.getBoolean(ColorBarService.KEY_AUTOSTART, true));
+        auto.setPadding(dp(4), dp(8), 0, dp(8));
+        auto.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean checked) {
+                prefs.edit().putBoolean(ColorBarService.KEY_AUTOSTART, checked).apply();
+            }
+        });
+        col.addView(auto);
+
         col.addView(button("1. Allow camera and notifications", new View.OnClickListener() {
             public void onClick(View v) { askPermissions(); }
         }));
@@ -131,7 +156,27 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (autostartMode) {
+            autostartMode = false;
+            // We are on screen right now, so Android allows the camera to start.
+            if (hasCamera() && hasOverlay() && !ColorBarService.running) {
+                try {
+                    Intent i = new Intent(this, ColorBarService.class);
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
+                    else startService(i);
+                } catch (Exception ignored) { }
+            }
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
         refreshStatus();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
     }
 
     private boolean hasCamera() {
