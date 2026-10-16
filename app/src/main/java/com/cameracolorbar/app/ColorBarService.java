@@ -34,6 +34,7 @@ import android.util.Range;
 import android.util.Size;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 
 import java.nio.ByteBuffer;
@@ -183,7 +184,33 @@ public class ColorBarService extends Service {
             // Without this, newer Android pushes the strip BELOW the status bar.
             lp.setFitInsetsTypes(0);
         }
+        followStatusBar();
         wm.addView(bar, lp);
+    }
+
+    /**
+     * Only show the strip when Android is showing the status bar.
+     * When an app goes full screen (video, game), Android hides the status bar
+     * and tells every window about it. We listen for that and hide/show our strip.
+     */
+    @SuppressWarnings("deprecation")
+    private void followStatusBar() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            // Android 11 and newer
+            bar.setOnApplyWindowInsetsListener((v, insets) -> {
+                setBarShown(insets.isVisible(WindowInsets.Type.statusBars()));
+                return insets;
+            });
+        } else {
+            // Android 10 and older
+            bar.setOnSystemUiVisibilityChangeListener(vis ->
+                    setBarShown((vis & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0));
+        }
+    }
+
+    private void setBarShown(boolean shown) {
+        if (bar == null) return;
+        bar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
     }
 
     private int statusBarHeight() {
