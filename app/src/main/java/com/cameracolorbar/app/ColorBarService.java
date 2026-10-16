@@ -59,7 +59,14 @@ public class ColorBarService extends Service {
     private Handler main;
     private WindowManager wm;
     private View bar;
-    private int shownColor = Color.TRANSPARENT;
+    // Fading: the color on screen (shown) slowly walks toward the camera's color (target).
+    // Stored as decimals so tiny steps are not lost to rounding.
+    private static final long FADE_FRAME_MS = 16;   // about 60 small steps per second
+    private static final float FADE_STEP = 0.04f;   // move 4% of the remaining distance each step
+    private boolean hasColor = false;
+    private float shownR, shownG, shownB;
+    private float targetR, targetG, targetB;
+    private boolean fading = false;
 
     private HandlerThread camThread;
     private Handler cam;
@@ -185,18 +192,61 @@ public class ColorBarService extends Service {
         return (int) (24 * getResources().getDisplayMetrics().density);
     }
 
-    /** Runs on the main thread. Blends toward the new color so it doesn't flicker. */
+    /**
+     * Runs on the main thread when the camera reports a new color.
+     * It does NOT paint the color right away. It only sets the goal,
+     * and the fade loop below walks there gradually.
+     */
     private void showColor(int target) {
         if (!running || bar == null) return;
-        if (Color.alpha(shownColor) == 0) {
-            shownColor = target;
-        } else {
-            shownColor = Color.rgb(
-                    (Color.red(shownColor) + Color.red(target)) / 2,
-                    (Color.green(shownColor) + Color.green(target)) / 2,
-                    (Color.blue(shownColor) + Color.blue(target)) / 2);
+        targetR = Color.red(target);
+        targetG = Color.green(target);
+        targetB = Color.blue(target);
+        if (!hasColor) {
+            // Very first color: start from it so the bar doesn't fade in from nothing.
+            shownR = targetR;
+            shownG = targetG;
+            shownB = targetB;
+            hasColor = true;
+            paint();
         }
-        bar.setBackgroundColor(shownColor);
+        if (!fading) {
+            fading = true;
+            main.post(fadeStep);
+        }
+    }
+
+    /**
+     * One small step of the fade, about 60 times a second.
+     * Each step moves 4% of the way that is left, so a big change
+     * (for example red to blue) blends over roughly one second, and small
+     * changes are barely noticeable.
+     */
+    private final Runnable fadeStep = new Runnable() {
+        @Override
+        public void run() {
+            if (!running || bar == null) {
+                fading = false;
+                return;
+            }
+            shownR += (targetR - shownR) * FADE_STEP;
+            shownG += (targetG - shownG) * FADE_STEP;
+            shownB += (targetB - shownB) * FADE_STEP;
+            paint();
+
+            boolean arrived = Math.abs(targetR - shownR) < 0.5f
+                    && Math.abs(targetG - shownG) < 0.5f
+                    && Math.abs(targetB - shownB) < 0.5f;
+            if (arrived) {
+                fading = false; // stop the loop to save battery until a new color comes in
+            } else {
+                main.postDelayed(this, FADE_FRAME_MS);
+            }
+        }
+    };
+
+    private void paint() {
+        bar.setBackgroundColor(Color.rgb(Math.round(shownR), Math.round(shownG), Math.round(shownB)));
     }
 
     // ---------- Camera (runs on the "camera" thread) ----------
