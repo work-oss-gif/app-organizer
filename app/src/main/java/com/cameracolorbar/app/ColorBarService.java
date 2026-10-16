@@ -49,8 +49,8 @@ import java.util.Collections;
  *
  * 1. Puts a colored strip at the very top of the screen, under the clock and battery icons.
  * 2. Keeps the back camera on at a tiny resolution.
- * 3. About 6 times a second it cuts a thin band from the middle of the camera picture,
- *    pixel by pixel, and the strip fades smoothly toward it.
+ * 3. About 6 times a second it splits the camera view into one zone per inch of strip,
+ *    averages each zone, and the strip fades smoothly toward those colors.
  */
 public class ColorBarService extends Service {
 
@@ -498,11 +498,14 @@ public class ColorBarService extends Service {
         int stripW = dm.widthPixels, stripH = statusBarHeight();
         if (stripW <= 0 || stripH <= 0) return null;
 
-        int pw = uprightW;  // one picture pixel per camera pixel across
-        int ph = Math.max(1, Math.round(pw * (float) stripH / stripW));
-        if (ph > uprightH) ph = uprightH;
-        float band = (float) ph / uprightH;     // how much of the picture's height we use
-        float top = 0.5f - band / 2f;           // centered vertically
+        // One color per inch of strip. xdpi = how many screen pixels make one inch.
+        float inches = stripW / Math.max(1f, dm.xdpi);
+        int zones = Math.max(2, Math.round(inches));
+
+        // Each zone averages a tall area of the camera view (the middle 40%),
+        // so the color reflects the surroundings, not one tiny spot.
+        final float top = 0.30f, band = 0.40f;
+        final int grid = 12; // 12 x 12 sample points per zone
 
         Image.Plane[] p = img.getPlanes();
         ByteBuffer yBuf = p[0].getBuffer(), uBuf = p[1].getBuffer(), vBuf = p[2].getBuffer();
@@ -510,31 +513,38 @@ public class ColorBarService extends Service {
         int uRow = p[1].getRowStride(), uPix = p[1].getPixelStride();
         int vRow = p[2].getRowStride(), vPix = p[2].getPixelStride();
 
-        int[] px = new int[pw * ph];
-        for (int j = 0; j < ph; j++) {
-            float v = top + (j + 0.5f) / ph * band;          // 0 = top of screen view, 1 = bottom
-            for (int i = 0; i < pw; i++) {
-                float u = (i + 0.5f) / pw;                   // 0 = left, 1 = right
-                // Turn the screen position into a position in the (possibly sideways) camera image.
-                float xn, yn;
-                switch (rot) {
-                    case 90:  xn = v;      yn = 1f - u; break;
-                    case 180: xn = 1f - u; yn = 1f - v; break;
-                    case 270: xn = 1f - v; yn = u;      break;
-                    default:  xn = u;      yn = v;      break;
+        int[] px = new int[zones];
+        for (int z = 0; z < zones; z++) {
+            long rs = 0, gs = 0, bs = 0;
+            int n = 0;
+            for (int a = 0; a < grid; a++) {
+                float u = (z + (a + 0.5f) / grid) / zones;       // 0 = left, 1 = right
+                for (int c = 0; c < grid; c++) {
+                    float v = top + (c + 0.5f) / grid * band;     // 0 = top, 1 = bottom
+                    // Turn the screen position into a position in the (possibly sideways) camera image.
+                    float xn, yn;
+                    switch (rot) {
+                        case 90:  xn = v;      yn = 1f - u; break;
+                        case 180: xn = 1f - u; yn = 1f - v; break;
+                        case 270: xn = 1f - v; yn = u;      break;
+                        default:  xn = u;      yn = v;      break;
+                    }
+                    int x = Math.min(w - 1, (int) (xn * w));
+                    int y = Math.min(h - 1, (int) (yn * h));
+                    int Y = yBuf.get(y * yRow + x * yPix) & 0xff;
+                    int U = (uBuf.get((y / 2) * uRow + (x / 2) * uPix) & 0xff) - 128;
+                    int V = (vBuf.get((y / 2) * vRow + (x / 2) * vPix) & 0xff) - 128;
+                    rs += clamp(Y + 1.402f * V);
+                    gs += clamp(Y - 0.344f * U - 0.714f * V);
+                    bs += clamp(Y + 1.772f * U);
+                    n++;
                 }
-                int x = Math.min(w - 1, (int) (xn * w));
-                int y = Math.min(h - 1, (int) (yn * h));
-                int Y = yBuf.get(y * yRow + x * yPix) & 0xff;
-                int U = (uBuf.get((y / 2) * uRow + (x / 2) * uPix) & 0xff) - 128;
-                int V = (vBuf.get((y / 2) * vRow + (x / 2) * vPix) & 0xff) - 128;
-                px[j * pw + i] = Color.rgb(
-                        clamp(Y + 1.402f * V),
-                        clamp(Y - 0.344f * U - 0.714f * V),
-                        clamp(Y + 1.772f * U));
             }
+            px[z] = Color.rgb((int) (rs / n), (int) (gs / n), (int) (bs / n));
         }
-        return new Slice(pw, ph, px);
+        // A picture "zones" pixels wide and 1 tall. When Android stretches it smoothly
+        // across the strip, neighbouring inches blend into each other like a gradient.
+        return new Slice(zones, 1, px);
     }
 
     private static int clamp(float v) {
@@ -564,8 +574,8 @@ public class ColorBarService extends Service {
         for (Size s : sizes) {
             long area = (long) s.getWidth() * s.getHeight();
             long bestArea = (long) best.getWidth() * best.getHeight();
-            // At least 480 wide so the strip has real detail, but as small as possible above that.
-            if (s.getWidth() >= 480 && (area < bestArea || best.getWidth() < 480)) best = s;
+            // Small picture is enough for averaged colors (saves battery).
+            if (s.getWidth() >= 320 && (area < bestArea || best.getWidth() < 320)) best = s;
         }
         return best;
     }
