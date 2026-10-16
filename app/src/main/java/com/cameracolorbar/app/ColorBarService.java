@@ -91,6 +91,8 @@ public class ColorBarService extends Service {
     private ImageReader reader;
     private boolean opening = false;
     private boolean screenOn = true;
+    // False while Android hides the status bar (full-screen video, game). Camera stays off then.
+    private volatile boolean barShown = true;
     private long lastFrame = 0;
 
     private BroadcastReceiver screenReceiver;
@@ -229,6 +231,18 @@ public class ColorBarService extends Service {
     private void setBarShown(boolean shown) {
         if (bar == null) return;
         bar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
+        if (shown == barShown) return;
+        barShown = shown;
+        if (cam == null) return;
+        // Strip hidden -> turn the camera off. Strip back -> turn the camera on again.
+        cam.post(() -> {
+            if (barShown) {
+                openCamera();
+            } else {
+                cam.removeCallbacksAndMessages(null);
+                closeCamera();
+            }
+        });
     }
 
     private int statusBarHeight() {
@@ -304,7 +318,7 @@ public class ColorBarService extends Service {
     // ---------- Camera (runs on the "camera" thread) ----------
 
     private void openCamera() {
-        if (!running || !screenOn || camera != null || opening) return;
+        if (!running || !screenOn || !barShown || camera != null || opening) return;
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             main.post(this::stopSelf);
             return;
@@ -331,7 +345,7 @@ public class ColorBarService extends Service {
         @Override
         public void onOpened(CameraDevice device) {
             opening = false;
-            if (!running || !screenOn) {
+            if (!running || !screenOn || !barShown) {
                 device.close();
                 return;
             }
