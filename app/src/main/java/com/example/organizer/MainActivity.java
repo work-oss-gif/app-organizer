@@ -32,9 +32,119 @@ public class MainActivity extends Activity {
 
     private static class App { String label; String pkg; android.graphics.drawable.Drawable icon; }
 
+    // ---------- Prediction ("Up next") ----------
+    // Every time you open an app from here we write down three simple facts:
+    //   c:<app>          how many times you opened it in total
+    //   h:<slot>:<app>   how many times you opened it at this time of day (8 slots of 3 hours)
+    //   t:<prev>><app>   how many times you opened it right after <prev>
+    // To guess the next app we give every app a score from those counts.
+    private static final String PREFS = "predict";
+    private static final long RECENT_MS = 60 * 60 * 1000L; // "right after" = within 1 hour
+
+    private int slot() { return Calendar.getInstance().get(Calendar.HOUR_OF_DAY) / 3; }
+
+    private void recordLaunch(String pkg) {
+        android.content.SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        android.content.SharedPreferences.Editor ed = sp.edit();
+        ed.putInt("c:" + pkg, sp.getInt("c:" + pkg, 0) + 1);
+        String hk = "h:" + slot() + ":" + pkg;
+        ed.putInt(hk, sp.getInt(hk, 0) + 1);
+        String last = sp.getString("last", null);
+        long lastTime = sp.getLong("lastTime", 0);
+        if (last != null && !last.equals(pkg) && System.currentTimeMillis() - lastTime < RECENT_MS) {
+            String tk = "t:" + last + ">" + pkg;
+            ed.putInt(tk, sp.getInt(tk, 0) + 1);
+        }
+        ed.putString("last", pkg);
+        ed.putLong("lastTime", System.currentTimeMillis());
+        ed.apply();
+    }
+
+    private static class Guess { App app; double score; String why; }
+
+    private List<Guess> predict(Map<String, App> all) {
+        android.content.SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String last = sp.getString("last", null);
+        boolean recent = last != null && System.currentTimeMillis() - sp.getLong("lastTime", 0) < RECENT_MS;
+        String slotPrefix = "h:" + slot() + ":";
+        List<Guess> out = new ArrayList<>();
+        for (App a : all.values()) {
+            int total = sp.getInt("c:" + a.pkg, 0);
+            if (total == 0) continue;
+            int after = recent ? sp.getInt("t:" + last + ">" + a.pkg, 0) : 0;
+            int now = sp.getInt(slotPrefix + a.pkg, 0);
+            Guess g = new Guess();
+            g.app = a;
+            // "After the last app" matters most, then "usual for this time", then "used a lot".
+            g.score = after * 3.0 + now * 1.5 + total * 0.2;
+            if (recent && a.pkg.equals(last)) g.score *= 0.3; // you just used it
+            App lastApp = recent ? all.get(last) : null;
+            if (after > 0 && lastApp != null) g.why = "after " + lastApp.label;
+            else if (now > 0) g.why = "usual now";
+            else g.why = "used often";
+            out.add(g);
+        }
+        Collections.sort(out, new Comparator<Guess>() {
+            public int compare(Guess x, Guess y) { return Double.compare(y.score, x.score); }
+        });
+        return out.size() > 4 ? out.subList(0, 4) : out;
+    }
+
+    private void addUpNext(Map<String, App> all, PackageManager pm) {
+        TextView h = new TextView(this);
+        h.setText("Up next");
+        h.setTextColor(Color.parseColor("#FFD54F"));
+        h.setTextSize(20);
+        h.setPadding(dp(4), dp(4), 0, dp(8));
+        root.addView(h);
+
+        List<Guess> guesses = predict(all);
+        if (guesses.isEmpty()) {
+            TextView t = new TextView(this);
+            t.setText("Open a few apps from this screen and I'll start guessing which one you need next.");
+            t.setTextColor(Color.parseColor("#BBBBBB"));
+            t.setTextSize(13);
+            t.setPadding(dp(4), 0, 0, dp(8));
+            root.addView(t);
+        } else {
+            GridLayout grid = new GridLayout(this);
+            grid.setColumnCount(4);
+            for (Guess g : guesses) {
+                LinearLayout c = (LinearLayout) cell(g.app, pm);
+                TextView why = new TextView(this);
+                why.setText(g.why);
+                why.setTextColor(Color.parseColor("#FFD54F"));
+                why.setTextSize(10);
+                why.setGravity(Gravity.CENTER);
+                why.setMaxLines(1);
+                why.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                why.setWidth(getResources().getDisplayMetrics().widthPixels / 4 - dp(6));
+                c.addView(why);
+                grid.addView(c);
+            }
+            root.addView(grid);
+        }
+
+        Button reset = new Button(this);
+        reset.setText("Reset learning");
+        reset.setTextSize(12);
+        reset.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().clear().apply();
+                Toast.makeText(MainActivity.this, "Forgot everything. Learning starts again.", Toast.LENGTH_SHORT).show();
+                build();
+            }
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.gravity = Gravity.END;
+        root.addView(reset, lp);
+    }
+
     private void build() {
         root.removeAllViews();
         PackageManager pm = getPackageManager();
+        Map<String, App> all = new HashMap<>();
 
         Set<String> browsers = new HashSet<>();
         Intent web = new Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com"));
@@ -53,7 +163,10 @@ public class MainActivity extends Activity {
             a.label = r.loadLabel(pm).toString();
             a.icon = r.loadIcon(pm);
             groups.get(categorize(r.activityInfo.applicationInfo, browsers.contains(pkg))).add(a);
+            all.put(pkg, a);
         }
+
+        addUpNext(all, pm);
 
         for (Map.Entry<String, List<App>> e : groups.entrySet()) {
             List<App> apps = e.getValue();
@@ -112,7 +225,7 @@ public class MainActivity extends Activity {
         c.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 Intent i = getPackageManager().getLaunchIntentForPackage(a.pkg);
-                if (i != null) startActivity(i);
+                if (i != null) { recordLaunch(a.pkg); startActivity(i); }
             }
         });
         c.setOnLongClickListener(new View.OnLongClickListener() {
