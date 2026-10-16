@@ -13,7 +13,10 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
+import android.util.DisplayMetrics;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.Icon;
@@ -46,8 +49,8 @@ import java.util.Collections;
  *
  * 1. Puts a colored strip at the very top of the screen, under the clock and battery icons.
  * 2. Keeps the back camera on at a tiny resolution.
- * 3. About 6 times a second it reads the color in the middle of the camera picture
- *    and paints the strip that color.
+ * 3. About 6 times a second it cuts a thin band from the middle of the camera picture,
+ *    pixel by pixel, and the strip fades smoothly toward it.
  */
 public class ColorBarService extends Service {
 
@@ -68,10 +71,17 @@ public class ColorBarService extends Service {
     // Stored as decimals so tiny steps are not lost to rounding.
     private static final long FADE_FRAME_MS = 16;   // about 60 small steps per second
     private static final float FADE_STEP = 0.04f;   // move 4% of the remaining distance each step
+    // The strip is a small picture: every pixel gets its own color from the camera.
+    // It is a thin horizontal slice through the middle of what the camera sees,
+    // one strip pixel per camera pixel, then smoothly stretched to fill the strip.
     private boolean hasColor = false;
-    private float shownR, shownG, shownB;
-    private float targetR, targetG, targetB;
+    private int picW = 0, picH = 0;        // size of the strip picture in camera pixels
+    private float[] shown = new float[0];  // r,g,b for every pixel, what's on screen now
+    private float[] target = new float[0]; // r,g,b for every pixel, what the camera sees
+    private int[] out = new int[0];
+    private Bitmap picture;
     private boolean fading = false;
+    private volatile int sensorOrientation = 90;
 
     // Strength from the slider: how colorful the strip is. 0.1 = almost gray, 1.0 = full color.
     // The strip itself is always solid (never see-through).
@@ -179,7 +189,7 @@ public class ColorBarService extends Service {
     private void addBar() {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         bar = new View(this);
-        bar.setBackgroundColor(Color.TRANSPARENT);
+        bar.setBackgroundColor(Color.TRANSPARENT);  // until the first camera picture arrives
 
         int type = Build.VERSION.SDK_INT >= 26
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -258,16 +268,30 @@ public class ColorBarService extends Service {
      * It does NOT paint the color right away. It only sets the goal,
      * and the fade loop below walks there gradually.
      */
-    private void showColor(int target) {
+    private void showPicture(Slice s) {
         if (!running || bar == null) return;
-        targetR = Color.red(target);
-        targetG = Color.green(target);
-        targetB = Color.blue(target);
+        if (s.w != picW || s.h != picH) {
+            // First picture, or the tablet was turned: set up new arrays and snap to it.
+            picW = s.w;
+            picH = s.h;
+            shown = new float[picW * picH * 3];
+            target = new float[picW * picH * 3];
+            out = new int[picW * picH];
+            picture = Bitmap.createBitmap(picW, picH, Bitmap.Config.ARGB_8888);
+            BitmapDrawable d = new BitmapDrawable(getResources(), picture);
+            d.setFilterBitmap(true);  // smooth stretching instead of blocky pixels
+            bar.setBackground(d);
+            hasColor = false;
+        }
+        for (int i = 0; i < s.pixels.length; i++) {
+            int c = s.pixels[i];
+            target[i * 3] = Color.red(c);
+            target[i * 3 + 1] = Color.green(c);
+            target[i * 3 + 2] = Color.blue(c);
+        }
         if (!hasColor) {
-            // Very first color: start from it so the bar doesn't fade in from nothing.
-            shownR = targetR;
-            shownG = targetG;
-            shownB = targetB;
+            // Very first colors: start from them so the bar doesn't fade in from nothing.
+            System.arraycopy(target, 0, shown, 0, shown.length);
             hasColor = true;
             paint();
         }
@@ -290,14 +314,13 @@ public class ColorBarService extends Service {
                 fading = false;
                 return;
             }
-            shownR += (targetR - shownR) * FADE_STEP;
-            shownG += (targetG - shownG) * FADE_STEP;
-            shownB += (targetB - shownB) * FADE_STEP;
+            boolean arrived = true;
+            for (int k = 0; k < shown.length; k++) {
+                shown[k] += (target[k] - shown[k]) * FADE_STEP;
+                if (Math.abs(target[k] - shown[k]) >= 0.5f) arrived = false;
+            }
             paint();
 
-            boolean arrived = Math.abs(targetR - shownR) < 0.5f
-                    && Math.abs(targetG - shownG) < 0.5f
-                    && Math.abs(targetB - shownB) < 0.5f;
             if (arrived) {
                 fading = false; // stop the loop to save battery until a new color comes in
             } else {
@@ -312,11 +335,17 @@ public class ColorBarService extends Service {
      * full strength = the real color, low strength = a soft, grayish version of it.
      */
     private void paint() {
-        float gray = 0.299f * shownR + 0.587f * shownG + 0.114f * shownB;
-        int r = Math.round(gray + (shownR - gray) * strength);
-        int g = Math.round(gray + (shownG - gray) * strength);
-        int b = Math.round(gray + (shownB - gray) * strength);
-        bar.setBackgroundColor(Color.rgb(clamp(r), clamp(g), clamp(b)));
+        if (picture == null) return;
+        for (int i = 0; i < out.length; i++) {
+            float r0 = shown[i * 3], g0 = shown[i * 3 + 1], b0 = shown[i * 3 + 2];
+            float gray = 0.299f * r0 + 0.587f * g0 + 0.114f * b0;
+            out[i] = Color.rgb(
+                    clamp(gray + (r0 - gray) * strength),
+                    clamp(gray + (g0 - gray) * strength),
+                    clamp(gray + (b0 - gray) * strength));
+        }
+        picture.setPixels(out, 0, picW, 0, 0, picW, picH);
+        bar.invalidate();
     }
 
     private void readOpacity() {
@@ -339,6 +368,9 @@ public class ColorBarService extends Service {
                 main.post(this::stopSelf);
                 return;
             }
+            Integer so = cameraManager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.SENSOR_ORIENTATION);
+            sensorOrientation = so != null ? so : 90;
             Size size = smallSize(id);
             reader = ImageReader.newInstance(size.getWidth(), size.getHeight(),
                     ImageFormat.YUV_420_888, 2);
@@ -424,42 +456,85 @@ public class ColorBarService extends Service {
             long now = SystemClock.uptimeMillis();
             if (now - lastFrame < FRAME_GAP_MS) return;
             lastFrame = now;
-            final int c = centerColor(img);
-            main.post(() -> showColor(c));
+            final Slice s = slice(img, imageRotation());
+            if (s != null) main.post(() -> showPicture(s));
         } catch (Exception ignored) {
         } finally {
             if (img != null) img.close();
         }
     }
 
+    /** A small picture (w x h pixels) cut from the camera image. */
+    private static final class Slice {
+        final int w, h;
+        final int[] pixels;
+        Slice(int w, int h, int[] pixels) { this.w = w; this.h = h; this.pixels = pixels; }
+    }
+
     /**
-     * Averages a small square in the middle of the picture.
-     * The camera gives "YUV" (brightness + two color channels), so we convert to normal RGB.
+     * How many degrees the camera picture must be turned to look upright on the screen.
+     * Depends on how the camera is mounted and how the tablet is being held.
      */
-    private static int centerColor(Image img) {
+    @SuppressWarnings("deprecation")
+    private int imageRotation() {
+        int deg = wm.getDefaultDisplay().getRotation() * 90; // ROTATION_0..270 are 0..3
+        return (sensorOrientation - deg + 360) % 360;
+    }
+
+    /**
+     * Cuts a thin horizontal band through the middle of the camera picture,
+     * with the same shape as the status bar, keeping every camera pixel.
+     * The camera gives "YUV" (brightness + two color channels), so each pixel is converted to RGB.
+     */
+    @SuppressWarnings("deprecation")
+    private Slice slice(Image img, int rot) {
         int w = img.getWidth(), h = img.getHeight();
+        boolean sideways = rot == 90 || rot == 270;
+        int uprightW = sideways ? h : w;
+        int uprightH = sideways ? w : h;
+
+        DisplayMetrics dm = new DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(dm);
+        int stripW = dm.widthPixels, stripH = statusBarHeight();
+        if (stripW <= 0 || stripH <= 0) return null;
+
+        int pw = uprightW;  // one picture pixel per camera pixel across
+        int ph = Math.max(1, Math.round(pw * (float) stripH / stripW));
+        if (ph > uprightH) ph = uprightH;
+        float band = (float) ph / uprightH;     // how much of the picture's height we use
+        float top = 0.5f - band / 2f;           // centered vertically
+
         Image.Plane[] p = img.getPlanes();
         ByteBuffer yBuf = p[0].getBuffer(), uBuf = p[1].getBuffer(), vBuf = p[2].getBuffer();
         int yRow = p[0].getRowStride(), yPix = p[0].getPixelStride();
         int uRow = p[1].getRowStride(), uPix = p[1].getPixelStride();
         int vRow = p[2].getRowStride(), vPix = p[2].getPixelStride();
 
-        int cx = w / 2, cy = h / 2;
-        int radius = Math.max(2, Math.min(w, h) / 20);
-        long rs = 0, gs = 0, bs = 0;
-        int n = 0;
-        for (int y = cy - radius; y <= cy + radius; y += 2) {
-            for (int x = cx - radius; x <= cx + radius; x += 2) {
+        int[] px = new int[pw * ph];
+        for (int j = 0; j < ph; j++) {
+            float v = top + (j + 0.5f) / ph * band;          // 0 = top of screen view, 1 = bottom
+            for (int i = 0; i < pw; i++) {
+                float u = (i + 0.5f) / pw;                   // 0 = left, 1 = right
+                // Turn the screen position into a position in the (possibly sideways) camera image.
+                float xn, yn;
+                switch (rot) {
+                    case 90:  xn = v;      yn = 1f - u; break;
+                    case 180: xn = 1f - u; yn = 1f - v; break;
+                    case 270: xn = 1f - v; yn = u;      break;
+                    default:  xn = u;      yn = v;      break;
+                }
+                int x = Math.min(w - 1, (int) (xn * w));
+                int y = Math.min(h - 1, (int) (yn * h));
                 int Y = yBuf.get(y * yRow + x * yPix) & 0xff;
                 int U = (uBuf.get((y / 2) * uRow + (x / 2) * uPix) & 0xff) - 128;
                 int V = (vBuf.get((y / 2) * vRow + (x / 2) * vPix) & 0xff) - 128;
-                rs += clamp(Y + 1.402f * V);
-                gs += clamp(Y - 0.344f * U - 0.714f * V);
-                bs += clamp(Y + 1.772f * U);
-                n++;
+                px[j * pw + i] = Color.rgb(
+                        clamp(Y + 1.402f * V),
+                        clamp(Y - 0.344f * U - 0.714f * V),
+                        clamp(Y + 1.772f * U));
             }
         }
-        return Color.rgb((int) (rs / n), (int) (gs / n), (int) (bs / n));
+        return new Slice(pw, ph, px);
     }
 
     private static int clamp(float v) {
@@ -489,7 +564,8 @@ public class ColorBarService extends Service {
         for (Size s : sizes) {
             long area = (long) s.getWidth() * s.getHeight();
             long bestArea = (long) best.getWidth() * best.getHeight();
-            if (s.getWidth() >= 160 && (area < bestArea || best.getWidth() < 160)) best = s;
+            // At least 480 wide so the strip has real detail, but as small as possible above that.
+            if (s.getWidth() >= 480 && (area < bestArea || best.getWidth() < 480)) best = s;
         }
         return best;
     }
