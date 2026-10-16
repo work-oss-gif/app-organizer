@@ -94,7 +94,8 @@ public class MainActivity extends Activity {
 
         TextView strengthHelp = new TextView(this);
         strengthHelp.setTextSize(14);
-        strengthHelp.setText("Low = see-through and subtle. High = solid color. Changes right away, even while it's running.");
+        strengthHelp.setText("How colorful the bar is. Low = soft, grayish color. High = the full camera color. "
+                + "The bar is always solid, never see-through. Changes right away, even while it's running.");
         col.addView(strengthHelp);
 
         SeekBar slider = new SeekBar(this);

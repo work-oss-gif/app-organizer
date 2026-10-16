@@ -73,8 +73,9 @@ public class ColorBarService extends Service {
     private float targetR, targetG, targetB;
     private boolean fading = false;
 
-    // Strength from the slider. Always the same, whatever the color is.
-    private int alpha = 255;  // 0 = invisible, 255 = solid
+    // Strength from the slider: how colorful the strip is. 0.1 = almost gray, 1.0 = full color.
+    // The strip itself is always solid (never see-through).
+    private float strength = 1f;
     private SharedPreferences prefs;
     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
             (p, key) -> {
@@ -305,15 +306,23 @@ public class ColorBarService extends Service {
         }
     };
 
+    /**
+     * Paints the strip. Always fully solid.
+     * The slider mixes the camera color with a gray of the same brightness:
+     * full strength = the real color, low strength = a soft, grayish version of it.
+     */
     private void paint() {
-        bar.setBackgroundColor(Color.argb(alpha,
-                Math.round(shownR), Math.round(shownG), Math.round(shownB)));
+        float gray = 0.299f * shownR + 0.587f * shownG + 0.114f * shownB;
+        int r = Math.round(gray + (shownR - gray) * strength);
+        int g = Math.round(gray + (shownG - gray) * strength);
+        int b = Math.round(gray + (shownB - gray) * strength);
+        bar.setBackgroundColor(Color.rgb(clamp(r), clamp(g), clamp(b)));
     }
 
     private void readOpacity() {
         int pct = prefs.getInt(KEY_OPACITY, 100);
         pct = Math.max(10, Math.min(100, pct));
-        alpha = Math.round(pct * 2.55f);
+        strength = pct / 100f;
     }
 
     // ---------- Camera (runs on the "camera" thread) ----------
