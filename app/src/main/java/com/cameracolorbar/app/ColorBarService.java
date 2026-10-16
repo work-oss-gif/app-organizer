@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.Color;
@@ -51,6 +52,8 @@ import java.util.Collections;
 public class ColorBarService extends Service {
 
     static final String ACTION_STOP = "com.cameracolorbar.app.STOP";
+    static final String PREFS = "settings";
+    static final String KEY_OPACITY = "opacity"; // 10..100 (percent)
     private static final String CHANNEL_ID = "colorbar";
     private static final long FRAME_GAP_MS = 150;
 
@@ -68,6 +71,17 @@ public class ColorBarService extends Service {
     private float shownR, shownG, shownB;
     private float targetR, targetG, targetB;
     private boolean fading = false;
+
+    // Strength from the slider. Always the same, whatever the color is.
+    private int alpha = 255;  // 0 = invisible, 255 = solid
+    private SharedPreferences prefs;
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
+            (p, key) -> {
+                if (KEY_OPACITY.equals(key)) {
+                    readOpacity();
+                    if (hasColor && bar != null) paint();
+                }
+            };
 
     private HandlerThread camThread;
     private Handler cam;
@@ -102,6 +116,10 @@ public class ColorBarService extends Service {
         }
         running = true;
         main = new Handler(Looper.getMainLooper());
+
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        readOpacity();
+        prefs.registerOnSharedPreferenceChangeListener(prefListener);
 
         try {
             addBar();
@@ -273,7 +291,14 @@ public class ColorBarService extends Service {
     };
 
     private void paint() {
-        bar.setBackgroundColor(Color.rgb(Math.round(shownR), Math.round(shownG), Math.round(shownB)));
+        bar.setBackgroundColor(Color.argb(alpha,
+                Math.round(shownR), Math.round(shownG), Math.round(shownB)));
+    }
+
+    private void readOpacity() {
+        int pct = prefs.getInt(KEY_OPACITY, 100);
+        pct = Math.max(10, Math.min(100, pct));
+        alpha = Math.round(pct * 2.55f);
     }
 
     // ---------- Camera (runs on the "camera" thread) ----------
@@ -506,6 +531,7 @@ public class ColorBarService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
         if (screenReceiver != null) {
             try { unregisterReceiver(screenReceiver); } catch (Exception ignored) { }
         }
