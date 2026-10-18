@@ -77,6 +77,7 @@ public class ColorBarService extends Service {
     private WindowManager wm;
     private View bar;
     private View blackBar;   // plain black strip underneath the color strip
+    private WindowManager.LayoutParams barLp, blackLp;
     // Fading: over 3 seconds the strip goes from the old colors (fadeFrom) to the new ones (target).
     private static final long FADE_FRAME_MS = 16;   // about 60 small steps per second
     private long fadeStart = 0;
@@ -210,8 +211,13 @@ public class ColorBarService extends Service {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 statusBarHeight(),
                 type,
+                // IMPORTANT: no FLAG_NOT_TOUCHABLE while the strip is showing.
+                // Android 12+ automatically makes "draw over other apps" windows that let
+                // touches pass through them 20% see-through (a safety rule). Without that flag
+                // the strip stays 100% solid. The real status bar sits above our strip,
+                // so it still gets all the touches (pulling down notifications works).
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.OPAQUE);   // the window itself can't be see-through
@@ -235,11 +241,31 @@ public class ColorBarService extends Service {
         // If the color strip is ever a little see-through, you see black through it, not the wallpaper.
         blackBar = new View(this);
         blackBar.setBackgroundColor(Color.BLACK);
-        WindowManager.LayoutParams blackLp = new WindowManager.LayoutParams();
+        blackLp = new WindowManager.LayoutParams();
         blackLp.copyFrom(lp);
         wm.addView(blackBar, blackLp);
 
+        barLp = lp;
         wm.addView(bar, lp);
+    }
+
+    /**
+     * While the strip is hidden (full-screen video/game) it must not catch any taps,
+     * so we turn "let touches pass through" back on. While it's showing, it stays off
+     * so Android keeps the strip fully solid.
+     */
+    private void setPassTouches(boolean pass) {
+        int f = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        try {
+            if (barLp != null && bar != null) {
+                barLp.flags = pass ? (barLp.flags | f) : (barLp.flags & ~f);
+                wm.updateViewLayout(bar, barLp);
+            }
+            if (blackLp != null && blackBar != null) {
+                blackLp.flags = pass ? (blackLp.flags | f) : (blackLp.flags & ~f);
+                wm.updateViewLayout(blackBar, blackLp);
+            }
+        } catch (Exception ignored) { }
     }
 
     /**
@@ -268,6 +294,7 @@ public class ColorBarService extends Service {
         if (blackBar != null) blackBar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
         if (shown == barShown) return;
         barShown = shown;
+        setPassTouches(!shown);
         if (cam == null) return;
         // Strip hidden -> turn the camera off. Strip back -> turn the camera on again.
         cam.post(() -> {
