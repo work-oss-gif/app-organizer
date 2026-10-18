@@ -21,7 +21,6 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.ExifInterface;
 import android.media.Image;
 import android.media.ImageReader;
-import android.media.MediaActionSound;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -58,7 +57,7 @@ import java.util.Locale;
  *  1. onResume (the app comes on screen) -> ask for camera permission if needed.
  *  2. Open the back camera and show a live preview for about 1 second,
  *     so the camera can adjust brightness and focus (otherwise photos come out dark).
- *  3. Take the photo, play the shutter sound, save it, show it.
+ *  3. Take the photo silently, save it, show it.
  */
 public class MainActivity extends Activity {
 
@@ -83,7 +82,6 @@ public class MainActivity extends Activity {
     private boolean snapped;
     private boolean wantCamera;
     private boolean askedPermission;
-    private final MediaActionSound shutter = new MediaActionSound();
 
     // ---------------------------------------------------------------- screen
 
@@ -91,7 +89,6 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         density = getResources().getDisplayMetrics().density;
-        shutter.load(MediaActionSound.SHUTTER_CLICK);
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -168,12 +165,6 @@ public class MainActivity extends Activity {
             camHandler = null;
         }
         super.onPause();
-    }
-
-    @Override
-    protected void onDestroy() {
-        shutter.release();
-        super.onDestroy();
     }
 
     @Override
@@ -323,7 +314,6 @@ public class MainActivity extends Activity {
             b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
             b.set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation);
             session.capture(b.build(), null, camHandler);
-            shutter.play(MediaActionSound.SHUTTER_CLICK);
         } catch (CameraAccessException | IllegalStateException e) {
             showError("Could not take the photo: " + e.getMessage());
         }
