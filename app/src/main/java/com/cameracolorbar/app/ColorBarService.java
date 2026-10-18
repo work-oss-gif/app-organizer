@@ -557,8 +557,9 @@ public class ColorBarService extends Service {
 
         int[] px = new int[zones];
         for (int z = 0; z < zones; z++) {
-            long rs = 0, gs = 0, bs = 0;
-            int n = 0;
+            // Weighted average: colorful pixels count much more than gray/white/black ones,
+            // so the result is the room's main COLOR instead of a muddy gray mix.
+            double rs = 0, gs = 0, bs = 0, n = 0;
             for (int a = 0; a < grid; a++) {
                 float u = (z + (a + 0.5f) / grid) / zones;       // 0 = left, 1 = right
                 for (int c = 0; c < grid; c++) {
@@ -576,17 +577,36 @@ public class ColorBarService extends Service {
                     int Y = yBuf.get(y * yRow + x * yPix) & 0xff;
                     int U = (uBuf.get((y / 2) * uRow + (x / 2) * uPix) & 0xff) - 128;
                     int V = (vBuf.get((y / 2) * vRow + (x / 2) * vPix) & 0xff) - 128;
-                    rs += clamp(Y + 1.402f * V);
-                    gs += clamp(Y - 0.344f * U - 0.714f * V);
-                    bs += clamp(Y + 1.772f * U);
-                    n++;
+                    int pr = clamp(Y + 1.402f * V);
+                    int pg = clamp(Y - 0.344f * U - 0.714f * V);
+                    int pb = clamp(Y + 1.772f * U);
+                    // How colorful is this pixel? 0 = gray, 1 = pure color.
+                    float colorful = (Math.max(pr, Math.max(pg, pb)) - Math.min(pr, Math.min(pg, pb))) / 255f;
+                    float weight = 0.1f + colorful * colorful * 10f;
+                    rs += pr * weight;
+                    gs += pg * weight;
+                    bs += pb * weight;
+                    n += weight;
                 }
             }
-            px[z] = Color.rgb((int) (rs / n), (int) (gs / n), (int) (bs / n));
+            px[z] = boost(Color.rgb((int) (rs / n), (int) (gs / n), (int) (bs / n)));
         }
         // A picture "zones" pixels wide and 1 tall. When Android stretches it smoothly
         // across the strip, neighbouring inches blend into each other like a gradient.
         return new Slice(zones, 1, px);
+    }
+
+    /**
+     * Makes a color about twice as vivid and a little brighter,
+     * so a slightly green room gives a clear green, not gray-olive.
+     * Grays stay gray (there is no color to boost).
+     */
+    private static int boost(int c) {
+        float[] hsv = new float[3];
+        Color.RGBToHSV(Color.red(c), Color.green(c), Color.blue(c), hsv);
+        hsv[1] = Math.min(1f, hsv[1] * 2.0f);               // colorfulness x2
+        hsv[2] = Math.min(1f, 0.15f + hsv[2] * 1.1f);        // a bit brighter, never pitch black
+        return Color.HSVToColor(hsv);
     }
 
     private static int clamp(float v) {
