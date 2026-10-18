@@ -95,17 +95,18 @@ public class MainActivity extends Activity {
 
         TextView strengthHelp = new TextView(this);
         strengthHelp.setTextSize(14);
-        strengthHelp.setText("How colorful the bar is. Low = soft, grayish color. High = the full camera color. "
-                + "The bar is always solid, never see-through. Changes right away, even while it's running.");
+        strengthHelp.setText("100% = the full camera color. Lower = the color fades into the black layer "
+                + "underneath, so it gets darker. 0% = pure black. The wallpaper never shows through. "
+                + "Changes right away, even while it's running.");
         col.addView(strengthHelp);
 
         SeekBar slider = new SeekBar(this);
-        slider.setMax(90);               // the slider goes 0..90, we add 10, so 10%..100%
-        slider.setProgress(saved - 10);
+        slider.setMax(100);              // 0% (black) .. 100% (full color)
+        slider.setProgress(saved);
         slider.setPadding(dp(8), dp(12), dp(8), dp(12));
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             public void onProgressChanged(SeekBar s, int progress, boolean fromUser) {
-                int pct = progress + 10;
+                int pct = progress;
                 strengthLabel.setText("Strength: " + pct + "%");
                 prefs.edit().putInt(ColorBarService.KEY_OPACITY, pct).apply();
             }

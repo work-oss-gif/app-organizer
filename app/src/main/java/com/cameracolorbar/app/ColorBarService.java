@@ -91,8 +91,8 @@ public class ColorBarService extends Service {
     private boolean fading = false;
     private volatile int sensorOrientation = 90;
 
-    // Strength from the slider: how colorful the strip is. 0.1 = almost gray, 1.0 = full color.
-    // The strip itself is always solid (never see-through).
+    // Strength from the slider: 1.0 = full camera color, lower = fades into black, 0 = pure black.
+    // The strip itself is always solid (the wallpaper never shows).
     private float strength = 1f;
     private SharedPreferences prefs;
     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
@@ -374,13 +374,14 @@ public class ColorBarService extends Service {
      */
     private void paint() {
         if (picture == null) return;
+        // The slider fades the color into the black layer underneath:
+        // 100% = full color, 50% = half color + half black (darker), 0% = pure black.
+        // We work out the mixed color here and paint it solid, so the wallpaper can never show.
         for (int i = 0; i < out.length; i++) {
-            float r0 = shown[i * 3], g0 = shown[i * 3 + 1], b0 = shown[i * 3 + 2];
-            float gray = 0.299f * r0 + 0.587f * g0 + 0.114f * b0;
             out[i] = Color.rgb(
-                    clamp(gray + (r0 - gray) * strength),
-                    clamp(gray + (g0 - gray) * strength),
-                    clamp(gray + (b0 - gray) * strength));
+                    clamp(shown[i * 3] * strength),
+                    clamp(shown[i * 3 + 1] * strength),
+                    clamp(shown[i * 3 + 2] * strength));
         }
         picture.setPixels(out, 0, picW, 0, 0, picW, picH);
         bar.invalidate();
@@ -388,7 +389,7 @@ public class ColorBarService extends Service {
 
     private void readOpacity() {
         int pct = prefs.getInt(KEY_OPACITY, 100);
-        pct = Math.max(10, Math.min(100, pct));
+        pct = Math.max(0, Math.min(100, pct));
         strength = pct / 100f;
     }
 
