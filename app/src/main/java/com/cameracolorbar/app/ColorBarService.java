@@ -132,7 +132,11 @@ public class ColorBarService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (running) return START_NOT_STICKY;
+        if (running) {
+            // Already running and the user pressed Start again: force the bar back (manual fix).
+            if (main != null) main.post(this::forceShowBar);
+            return START_NOT_STICKY;
+        }
 
         try {
             goForeground();
@@ -149,6 +153,7 @@ public class ColorBarService extends Service {
 
         try {
             addBar();
+            main.postDelayed(watchdog, WATCHDOG_MS);
         } catch (Exception e) {
             // Usually means "Display over other apps" is not allowed.
             stopSelf();
@@ -286,6 +291,61 @@ public class ColorBarService extends Service {
             bar.setOnSystemUiVisibilityChangeListener(vis ->
                     setBarShown((vis & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0));
         }
+    }
+
+    // ---------- Safety check: never let the bar get stuck hidden ----------
+
+    private static final long WATCHDOG_MS = 3_000;
+
+    /**
+     * Every 3 seconds: if Android removed our strips, put them back.
+     * If the strip is hidden, ask Android again whether the status bar is REALLY hidden,
+     * because some apps (like Chrome search) make Android say "hidden" and then never
+     * send the "it's back" message.
+     */
+    private final Runnable watchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (!running) return;
+            reattachIfNeeded();
+            if (!barShown && bar != null) recheckStatusBar();
+            main.postDelayed(this, WATCHDOG_MS);
+        }
+    };
+
+    private void reattachIfNeeded() {
+        try {
+            if (blackBar != null && blackLp != null && !blackBar.isAttachedToWindow()) {
+                wm.addView(blackBar, blackLp);
+            }
+            if (bar != null && barLp != null && !bar.isAttachedToWindow()) {
+                wm.addView(bar, barLp);   // added after the black one, so it stays on top
+            }
+        } catch (Exception ignored) { }
+    }
+
+    /** Reads the CURRENT status bar state directly, instead of waiting for a message. */
+    @SuppressWarnings("deprecation")
+    private void recheckStatusBar() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsets now = bar.getRootWindowInsets();
+            if (now != null && now.isVisible(WindowInsets.Type.statusBars())) {
+                setBarShown(true);
+            } else {
+                bar.requestApplyInsets(); // ask Android to send us a fresh update
+            }
+        } else {
+            if ((bar.getWindowSystemUiVisibility() & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
+                setBarShown(true);
+            }
+        }
+    }
+
+    /** Pressing Start while running: put the strips back and show them. */
+    private void forceShowBar() {
+        reattachIfNeeded();
+        setBarShown(true);
+        if (bar != null) bar.requestApplyInsets(); // if a video really is full screen, it hides again
     }
 
     private void setBarShown(boolean shown) {
