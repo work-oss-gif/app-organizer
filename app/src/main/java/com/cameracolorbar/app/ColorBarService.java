@@ -49,8 +49,8 @@ import java.util.Collections;
  *
  * 1. Puts a colored strip at the very top of the screen, under the clock and battery icons.
  * 2. Once a minute it turns the back camera on for about 2 seconds, takes one reading
- *    (one averaged color per inch of strip), and turns the camera off again.
- * 3. If the colors changed, the strip fades to them over 3 seconds.
+ *    (one averaged color for the whole strip), and turns the camera off again.
+ * 3. Only if the color changed a LOT, the strip fades to it over 3 seconds.
  */
 public class ColorBarService extends Service {
 
@@ -63,6 +63,9 @@ public class ColorBarService extends Service {
     private static final long CHECK_EVERY_MS = 60_000; // look through the camera at most once a minute
     private static final long SETTLE_MS = 1_500;       // give the camera 1.5 s to adjust brightness first
     private static final long FADE_MS = 3_000;         // a color change takes 3 seconds
+    // How different a new color must be before the strip changes (0..440).
+    // 70 = for example a beige wall to a green plant, but NOT a shadow or a light being dimmed a bit.
+    private static final float MAJOR_CHANGE = 70f;
 
     /** Read by the main screen to show "ON" or "off". */
     static volatile boolean running = false;
@@ -301,12 +304,15 @@ public class ColorBarService extends Service {
             paint();
             return;
         }
-        // Nothing really changed? Then don't animate at all.
-        boolean changed = false;
-        for (int k = 0; k < shown.length; k++) {
-            if (Math.abs(target[k] - shown[k]) >= 1f) { changed = true; break; }
+        // Only a MAJOR color change counts. Measure how far the new color is from the
+        // one on screen (0 = identical, about 440 = black vs white). Below the limit: ignore it,
+        // and keep the current color exactly as it is.
+        float dr = target[0] - shown[0], dg = target[1] - shown[1], db = target[2] - shown[2];
+        float distance = (float) Math.sqrt(dr * dr + dg * dg + db * db);
+        if (distance < MAJOR_CHANGE) {
+            System.arraycopy(shown, 0, target, 0, shown.length); // forget the small change
+            return;
         }
-        if (!changed) return;
 
         // Start a new 3-second fade from whatever is on screen right now.
         System.arraycopy(shown, 0, fadeFrom, 0, shown.length);
@@ -535,14 +541,13 @@ public class ColorBarService extends Service {
         int stripW = dm.widthPixels, stripH = statusBarHeight();
         if (stripW <= 0 || stripH <= 0) return null;
 
-        // One color per inch of strip. xdpi = how many screen pixels make one inch.
-        float inches = stripW / Math.max(1f, dm.xdpi);
-        int zones = Math.max(2, Math.round(inches));
+        // ONE color for the whole strip: the average of the whole middle band of the camera view.
+        int zones = 1;
 
         // Each zone averages a tall area of the camera view (the middle 40%),
         // so the color reflects the surroundings, not one tiny spot.
         final float top = 0.30f, band = 0.40f;
-        final int grid = 12; // 12 x 12 sample points per zone
+        final int grid = 24; // 24 x 24 sample points spread over the area
 
         Image.Plane[] p = img.getPlanes();
         ByteBuffer yBuf = p[0].getBuffer(), uBuf = p[1].getBuffer(), vBuf = p[2].getBuffer();
