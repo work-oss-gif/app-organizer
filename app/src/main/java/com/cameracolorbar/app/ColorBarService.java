@@ -51,7 +51,7 @@ import java.util.Collections;
  * Runs in the background (with a notification, which Android requires).
  *
  * 1. Puts a colored strip at the very top of the screen, under the clock and battery icons.
- * 2. Once a minute it turns the back camera on for about 2 seconds, takes one reading
+ * 2. Every 10 minutes it turns the back camera on for about 2 seconds, takes one reading
  *    (one averaged color for the whole strip), and turns the camera off again.
  * 3. Only if the color changed a LOT, the strip fades to it over 3 seconds.
  */
@@ -63,7 +63,7 @@ public class ColorBarService extends Service {
     static final String KEY_AUTOSTART = "autostart"; // start when the tablet turns on
     private static final String CHANNEL_ID = "colorbar";
     // Timing
-    private static final long CHECK_EVERY_MS = 60_000; // look through the camera at most once a minute
+    private static final long CHECK_EVERY_MS = 600_000; // look through the camera at most once every 10 minutes
     private static final long SETTLE_MS = 1_500;       // give the camera 1.5 s to adjust brightness first
     private static final long FADE_MS = 3_000;         // a color change takes 3 seconds
     // How different a new color must be before the strip changes (0..440).
@@ -184,7 +184,7 @@ public class ColorBarService extends Service {
                 : new Notification.Builder(this);
         b.setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentTitle("Camera Color Bar is on")
-                .setContentText("The camera checks the colors once a minute. Tap Stop to turn it off.")
+                .setContentText("The camera checks the colors every 10 minutes. Tap Stop to turn it off.")
                 .setContentIntent(openPi)
                 .setOngoing(true)
                 .addAction(new Notification.Action.Builder((Icon) null, "Stop", stopPi).build());
@@ -299,7 +299,7 @@ public class ColorBarService extends Service {
         // Strip hidden -> turn the camera off. Strip back -> turn the camera on again.
         cam.post(() -> {
             if (barShown) {
-                scheduleNext(); // still at most once a minute
+                scheduleNext(); // still at most once every 10 minutes
             } else {
                 cam.removeCallbacksAndMessages(null);
                 closeCamera();
@@ -517,9 +517,9 @@ public class ColorBarService extends Service {
     }
 
     /**
-     * The camera is only on for about 2 seconds each minute:
+     * The camera is only on for about 2 seconds every 10 minutes:
      * wait 1.5 s so it can adjust to the room's light, take ONE reading,
-     * turn the camera off, and come back in a minute.
+     * turn the camera off, and come back in 10 minutes.
      */
     private void onFrame(ImageReader r) {
         Image img = null;
@@ -543,7 +543,7 @@ public class ColorBarService extends Service {
         }
     }
 
-    /** Plan the next camera check so there is at most one per minute. */
+    /** Plan the next camera check so there is at most one every 10 minutes. */
     private void scheduleNext() {
         if (!running || cam == null) return;
         cam.removeCallbacks(openRunnable);
@@ -737,7 +737,7 @@ public class ColorBarService extends Service {
                 } else if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) {
                     cam.post(() -> {
                         screenOn = true;
-                        scheduleNext(); // still at most once a minute
+                        scheduleNext(); // still at most once every 10 minutes
                     });
                 }
             }
