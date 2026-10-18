@@ -76,6 +76,7 @@ public class ColorBarService extends Service {
     private Handler main;
     private WindowManager wm;
     private View bar;
+    private View blackBar;   // plain black strip underneath the color strip
     // Fading: over 3 seconds the strip goes from the old colors (fadeFrom) to the new ones (target).
     private static final long FADE_FRAME_MS = 16;   // about 60 small steps per second
     private long fadeStart = 0;
@@ -228,6 +229,16 @@ public class ColorBarService extends Service {
             lp.setFitInsetsTypes(0);
         }
         followStatusBar();
+
+        // Two strips stacked: a plain BLACK strip on the bottom layer, the color strip on top.
+        // Android stacks windows in the order they are added, so the black one goes in first.
+        // If the color strip is ever a little see-through, you see black through it, not the wallpaper.
+        blackBar = new View(this);
+        blackBar.setBackgroundColor(Color.BLACK);
+        WindowManager.LayoutParams blackLp = new WindowManager.LayoutParams();
+        blackLp.copyFrom(lp);
+        wm.addView(blackBar, blackLp);
+
         wm.addView(bar, lp);
     }
 
@@ -254,6 +265,7 @@ public class ColorBarService extends Service {
     private void setBarShown(boolean shown) {
         if (bar == null) return;
         bar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
+        if (blackBar != null) blackBar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
         if (shown == barShown) return;
         barShown = shown;
         if (cam == null) return;
@@ -724,6 +736,10 @@ public class ColorBarService extends Service {
         if (bar != null && wm != null) {
             try { wm.removeView(bar); } catch (Exception ignored) { }
             bar = null;
+        }
+        if (blackBar != null && wm != null) {
+            try { wm.removeView(blackBar); } catch (Exception ignored) { }
+            blackBar = null;
         }
         super.onDestroy();
     }
