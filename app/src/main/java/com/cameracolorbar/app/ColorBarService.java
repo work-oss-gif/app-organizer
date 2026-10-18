@@ -48,9 +48,9 @@ import java.util.Collections;
  * Runs in the background (with a notification, which Android requires).
  *
  * 1. Puts a colored strip at the very top of the screen, under the clock and battery icons.
- * 2. Keeps the back camera on at a tiny resolution.
- * 3. About 6 times a second it splits the camera view into one zone per inch of strip,
- *    averages each zone, and the strip fades smoothly toward those colors.
+ * 2. Once a minute it turns the back camera on for about 2 seconds, takes one reading
+ *    (one averaged color per inch of strip), and turns the camera off again.
+ * 3. If the colors changed, the strip fades to them over 3 seconds.
  */
 public class ColorBarService extends Service {
 
@@ -59,7 +59,10 @@ public class ColorBarService extends Service {
     static final String KEY_OPACITY = "opacity"; // 10..100 (percent)
     static final String KEY_AUTOSTART = "autostart"; // start when the tablet turns on
     private static final String CHANNEL_ID = "colorbar";
-    private static final long FRAME_GAP_MS = 150;
+    // Timing
+    private static final long CHECK_EVERY_MS = 60_000; // look through the camera at most once a minute
+    private static final long SETTLE_MS = 1_500;       // give the camera 1.5 s to adjust brightness first
+    private static final long FADE_MS = 3_000;         // a color change takes 3 seconds
 
     /** Read by the main screen to show "ON" or "off". */
     static volatile boolean running = false;
@@ -67,17 +70,15 @@ public class ColorBarService extends Service {
     private Handler main;
     private WindowManager wm;
     private View bar;
-    // Fading: the color on screen (shown) slowly walks toward the camera's color (target).
-    // Stored as decimals so tiny steps are not lost to rounding.
+    // Fading: over 3 seconds the strip goes from the old colors (fadeFrom) to the new ones (target).
     private static final long FADE_FRAME_MS = 16;   // about 60 small steps per second
-    private static final float FADE_STEP = 0.04f;   // move 4% of the remaining distance each step
-    // The strip is a small picture: every pixel gets its own color from the camera.
-    // It is a thin horizontal slice through the middle of what the camera sees,
-    // one strip pixel per camera pixel, then smoothly stretched to fill the strip.
+    private long fadeStart = 0;
+    // The strip is a tiny picture with one color per inch, smoothly stretched to fill the strip.
     private boolean hasColor = false;
-    private int picW = 0, picH = 0;        // size of the strip picture in camera pixels
-    private float[] shown = new float[0];  // r,g,b for every pixel, what's on screen now
-    private float[] target = new float[0]; // r,g,b for every pixel, what the camera sees
+    private int picW = 0, picH = 0;          // size of the strip picture
+    private float[] shown = new float[0];    // r,g,b per zone: what's on screen now
+    private float[] target = new float[0];   // r,g,b per zone: what the camera saw last
+    private float[] fadeFrom = new float[0]; // r,g,b per zone: where the current fade started
     private int[] out = new int[0];
     private Bitmap picture;
     private boolean fading = false;
@@ -105,7 +106,10 @@ public class ColorBarService extends Service {
     private boolean screenOn = true;
     // False while Android hides the status bar (full-screen video, game). Camera stays off then.
     private volatile boolean barShown = true;
-    private long lastFrame = 0;
+    private long sessionStart = 0;   // when the camera started sending pictures this time
+    private long lastReading = 0;    // when we last took a reading (0 = never)
+    private boolean gotReading = false;
+    private final Runnable openRunnable = this::openCamera;
 
     private BroadcastReceiver screenReceiver;
 
@@ -149,7 +153,7 @@ public class ColorBarService extends Service {
         cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
 
         listenForScreenOnOff();
-        cam.post(this::openCamera);
+        cam.post(this::scheduleNext); // first reading right away
         return START_NOT_STICKY;
     }
 
@@ -172,7 +176,7 @@ public class ColorBarService extends Service {
                 : new Notification.Builder(this);
         b.setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentTitle("Camera Color Bar is on")
-                .setContentText("The top bar shows the back camera's color. Tap Stop to turn it off.")
+                .setContentText("The camera checks the colors once a minute. Tap Stop to turn it off.")
                 .setContentIntent(openPi)
                 .setOngoing(true)
                 .addAction(new Notification.Action.Builder((Icon) null, "Stop", stopPi).build());
@@ -249,7 +253,7 @@ public class ColorBarService extends Service {
         // Strip hidden -> turn the camera off. Strip back -> turn the camera on again.
         cam.post(() -> {
             if (barShown) {
-                openCamera();
+                scheduleNext(); // still at most once a minute
             } else {
                 cam.removeCallbacksAndMessages(null);
                 closeCamera();
@@ -276,6 +280,7 @@ public class ColorBarService extends Service {
             picH = s.h;
             shown = new float[picW * picH * 3];
             target = new float[picW * picH * 3];
+            fadeFrom = new float[picW * picH * 3];
             out = new int[picW * picH];
             picture = Bitmap.createBitmap(picW, picH, Bitmap.Config.ARGB_8888);
             BitmapDrawable d = new BitmapDrawable(getResources(), picture);
@@ -294,7 +299,18 @@ public class ColorBarService extends Service {
             System.arraycopy(target, 0, shown, 0, shown.length);
             hasColor = true;
             paint();
+            return;
         }
+        // Nothing really changed? Then don't animate at all.
+        boolean changed = false;
+        for (int k = 0; k < shown.length; k++) {
+            if (Math.abs(target[k] - shown[k]) >= 1f) { changed = true; break; }
+        }
+        if (!changed) return;
+
+        // Start a new 3-second fade from whatever is on screen right now.
+        System.arraycopy(shown, 0, fadeFrom, 0, shown.length);
+        fadeStart = SystemClock.uptimeMillis();
         if (!fading) {
             fading = true;
             main.post(fadeStep);
@@ -302,10 +318,9 @@ public class ColorBarService extends Service {
     }
 
     /**
-     * One small step of the fade, about 60 times a second.
-     * Each step moves 4% of the way that is left, so a big change
-     * (for example red to blue) blends over roughly one second, and small
-     * changes are barely noticeable.
+     * One small step of the fade, about 60 times a second, for 3 seconds.
+     * It starts gently, speeds up in the middle and slows down at the end,
+     * so you can't see where the change begins or stops.
      */
     private final Runnable fadeStep = new Runnable() {
         @Override
@@ -314,15 +329,15 @@ public class ColorBarService extends Service {
                 fading = false;
                 return;
             }
-            boolean arrived = true;
+            float t = Math.min(1f, (SystemClock.uptimeMillis() - fadeStart) / (float) FADE_MS);
+            float e = t * t * (3f - 2f * t); // gentle start and end
             for (int k = 0; k < shown.length; k++) {
-                shown[k] += (target[k] - shown[k]) * FADE_STEP;
-                if (Math.abs(target[k] - shown[k]) >= 0.5f) arrived = false;
+                shown[k] = fadeFrom[k] + (target[k] - fadeFrom[k]) * e;
             }
             paint();
 
-            if (arrived) {
-                fading = false; // stop the loop to save battery until a new color comes in
+            if (t >= 1f) {
+                fading = false; // done; nothing runs until the next reading
             } else {
                 main.postDelayed(this, FADE_FRAME_MS);
             }
@@ -422,6 +437,8 @@ public class ColorBarService extends Service {
                         public void onConfigured(CameraCaptureSession s) {
                             if (camera == null) return;
                             session = s;
+                            sessionStart = SystemClock.uptimeMillis();
+                            gotReading = false;
                             try {
                                 CaptureRequest.Builder rb =
                                         camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
@@ -448,20 +465,40 @@ public class ColorBarService extends Service {
         }
     }
 
+    /**
+     * The camera is only on for about 2 seconds each minute:
+     * wait 1.5 s so it can adjust to the room's light, take ONE reading,
+     * turn the camera off, and come back in a minute.
+     */
     private void onFrame(ImageReader r) {
         Image img = null;
         try {
             img = r.acquireLatestImage();
-            if (img == null) return;
-            long now = SystemClock.uptimeMillis();
-            if (now - lastFrame < FRAME_GAP_MS) return;
-            lastFrame = now;
+            if (img == null || gotReading) return;
+            if (SystemClock.uptimeMillis() - sessionStart < SETTLE_MS) return; // still adjusting
+            gotReading = true;
             final Slice s = slice(img, imageRotation());
             if (s != null) main.post(() -> showPicture(s));
         } catch (Exception ignored) {
         } finally {
             if (img != null) img.close();
         }
+        if (gotReading) {
+            lastReading = SystemClock.uptimeMillis();
+            cam.post(() -> {
+                closeCamera();   // camera OFF until the next check
+                scheduleNext();
+            });
+        }
+    }
+
+    /** Plan the next camera check so there is at most one per minute. */
+    private void scheduleNext() {
+        if (!running || cam == null) return;
+        cam.removeCallbacks(openRunnable);
+        long wait = lastReading == 0 ? 0
+                : Math.max(0, lastReading + CHECK_EVERY_MS - SystemClock.uptimeMillis());
+        cam.postDelayed(openRunnable, wait);
     }
 
     /** A small picture (w x h pixels) cut from the camera image. */
@@ -609,7 +646,10 @@ public class ColorBarService extends Service {
     }
 
     private void retryLater() {
-        if (running && cam != null) cam.postDelayed(this::openCamera, 3000);
+        if (running && cam != null) {
+            cam.removeCallbacks(openRunnable);
+            cam.postDelayed(openRunnable, 3000);
+        }
     }
 
     // ---------- Turn the camera off while the screen is off (saves battery) ----------
@@ -627,7 +667,7 @@ public class ColorBarService extends Service {
                 } else if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) {
                     cam.post(() -> {
                         screenOn = true;
-                        openCamera();
+                        scheduleNext(); // still at most once a minute
                     });
                 }
             }

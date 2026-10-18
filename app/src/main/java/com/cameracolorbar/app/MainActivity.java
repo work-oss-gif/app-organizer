@@ -67,10 +67,11 @@ public class MainActivity extends Activity {
         col.addView(title);
 
         TextView info = new TextView(this);
-        info.setText("Paints the top status bar with the color the back camera sees "
-                + "(the middle of the picture). It keeps working in every app until you press Stop.\n\n"
-                + "Heads-up: the camera stays on, so this uses a lot of battery. "
-                + "The camera turns off by itself while the screen is off.");
+        info.setText("Paints the top status bar with the colors the back camera sees. "
+                + "It keeps working in every app until you press Stop.\n\n"
+                + "Once a minute the camera turns on for about 2 seconds, looks, and turns off again. "
+                + "If the colors changed, the bar fades to them over 3 seconds. "
+                + "The camera never turns on while the screen is off or during full-screen videos.");
         info.setTextSize(15);
         info.setPadding(0, dp(8), 0, dp(16));
         col.addView(info);
