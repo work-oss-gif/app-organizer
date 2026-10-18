@@ -16,6 +16,9 @@ import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.util.DisplayMetrics;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
@@ -196,7 +199,7 @@ public class ColorBarService extends Service {
     private void addBar() {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         bar = new View(this);
-        bar.setBackgroundColor(Color.TRANSPARENT);  // until the first camera picture arrives
+        bar.setBackgroundColor(Color.BLACK);  // black (never see-through) until the first camera color
 
         int type = Build.VERSION.SDK_INT >= 26
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -210,7 +213,8 @@ public class ColorBarService extends Service {
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT);
+                PixelFormat.OPAQUE);   // the window itself can't be see-through
+        lp.alpha = 1f;
         lp.gravity = Gravity.TOP | Gravity.START;
         lp.x = 0;
         lp.y = 0;
@@ -288,7 +292,8 @@ public class ColorBarService extends Service {
             picture = Bitmap.createBitmap(picW, picH, Bitmap.Config.ARGB_8888);
             BitmapDrawable d = new BitmapDrawable(getResources(), picture);
             d.setFilterBitmap(true);  // smooth stretching instead of blocky pixels
-            bar.setBackground(d);
+            // Solid black underneath the color, so nothing behind can ever show through.
+            bar.setBackground(new LayerDrawable(new Drawable[]{new ColorDrawable(Color.BLACK), d}));
             hasColor = false;
         }
         for (int i = 0; i < s.pixels.length; i++) {
