@@ -348,9 +348,18 @@ public class ColorBarService extends Service {
         if (bar == null) return;
         // Setting "Hide during full-screen videos" turned off: the bar always stays.
         if (prefs != null && !prefs.getBoolean(KEY_HIDE_FULLSCREEN, true)) shown = true;
+        // The 3 lower layers are simply hidden.
         int vis = shown ? View.VISIBLE : View.INVISIBLE;
-        bar.setVisibility(vis);
         for (View v : under) if (v != null) v.setVisibility(vis);
+        // The TOP layer is never made invisible, because Android stops telling invisible
+        // windows when the status bar comes back (that's why the bar stayed gone after a game).
+        // Instead we make it fully clear (alpha 0). It keeps listening, and taps still pass through.
+        bar.setVisibility(View.VISIBLE);
+        float alpha = shown ? 1f : 0f;
+        if (barLp != null && barLp.alpha != alpha) {
+            barLp.alpha = alpha;
+            try { wm.updateViewLayout(bar, barLp); } catch (Exception ignored) { }
+        }
         if (shown == barShown) return;
         barShown = shown;
         if (cam == null) return;
