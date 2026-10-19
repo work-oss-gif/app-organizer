@@ -128,6 +128,20 @@ public class MainActivity extends Activity {
         });
         col.addView(auto);
 
+        // ---- Hide during full-screen videos checkbox ----
+        CheckBox hideFs = new CheckBox(this);
+        hideFs.setText("Hide the bar during full-screen videos and games "
+                + "(turn off if the bar ever disappears and doesn't come back)");
+        hideFs.setTextSize(15);
+        hideFs.setChecked(prefs.getBoolean(ColorBarService.KEY_HIDE_FULLSCREEN, true));
+        hideFs.setPadding(dp(4), dp(8), 0, dp(8));
+        hideFs.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean checked) {
+                prefs.edit().putBoolean(ColorBarService.KEY_HIDE_FULLSCREEN, checked).apply();
+            }
+        });
+        col.addView(hideFs);
+
         col.addView(button("1. Allow camera and notifications", new View.OnClickListener() {
             public void onClick(View v) { askPermissions(); }
         }));
@@ -136,6 +150,9 @@ public class MainActivity extends Activity {
         }));
         col.addView(button("Start", new View.OnClickListener() {
             public void onClick(View v) { startBar(); }
+        }));
+        col.addView(button("Update now", new View.OnClickListener() {
+            public void onClick(View v) { updateNow(); }
         }));
         col.addView(button("Stop", new View.OnClickListener() {
             public void onClick(View v) { stopBar(); }
@@ -245,6 +262,20 @@ public class MainActivity extends Activity {
         statusText.postDelayed(new Runnable() {
             public void run() { refreshStatus(); }
         }, 500);
+    }
+
+    /** Looks through the camera right away and shows the new color at once (about 2 seconds). */
+    private void updateNow() {
+        if (!ColorBarService.running) {
+            startBar(); // not running yet: Start already takes a reading right away
+            return;
+        }
+        try {
+            startService(new Intent(this, ColorBarService.class).setAction(ColorBarService.ACTION_UPDATE));
+            toast("Updating... the color changes in about 2 seconds");
+        } catch (Exception e) {
+            toast("Could not update: " + e.getMessage());
+        }
     }
 
     private void stopBar() {

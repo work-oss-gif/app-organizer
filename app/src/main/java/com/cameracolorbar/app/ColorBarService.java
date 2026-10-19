@@ -58,6 +58,8 @@ import java.util.Collections;
 public class ColorBarService extends Service {
 
     static final String ACTION_STOP = "com.cameracolorbar.app.STOP";
+    static final String ACTION_UPDATE = "com.cameracolorbar.app.UPDATE";
+    static final String KEY_HIDE_FULLSCREEN = "hide_fullscreen"; // hide the bar during full-screen videos
     static final String PREFS = "settings";
     static final String KEY_OPACITY = "opacity"; // 10..100 (percent)
     static final String KEY_AUTOSTART = "autostart"; // start when the tablet turns on
@@ -76,8 +78,12 @@ public class ColorBarService extends Service {
     private Handler main;
     private WindowManager wm;
     private View bar;
-    private View blackBar;   // plain black strip underneath the color strip
-    private WindowManager.LayoutParams barLp, blackLp;
+    // 3 more identical color strips underneath the top one (4 layers in total).
+    private final View[] under = new View[3];
+    private final WindowManager.LayoutParams[] underLp = new WindowManager.LayoutParams[3];
+    private WindowManager.LayoutParams barLp;
+    // Set by "Update now": the next reading is shown right away, even if the change is small.
+    private volatile boolean forceNext = false;
     // Fading: over 3 seconds the strip goes from the old colors (fadeFrom) to the new ones (target).
     private static final long FADE_FRAME_MS = 16;   // about 60 small steps per second
     private long fadeStart = 0;
@@ -101,6 +107,8 @@ public class ColorBarService extends Service {
                 if (KEY_OPACITY.equals(key)) {
                     readOpacity();
                     if (hasColor && bar != null) paint();
+                } else if (KEY_HIDE_FULLSCREEN.equals(key)) {
+                    forceShowBar(); // re-check right away with the new setting
                 }
             };
 
@@ -132,9 +140,11 @@ public class ColorBarService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        boolean update = intent != null && ACTION_UPDATE.equals(intent.getAction());
         if (running) {
-            // Already running and the user pressed Start again: force the bar back (manual fix).
-            if (main != null) main.post(this::forceShowBar);
+            // Already running. "Update now" = new reading right away.
+            // Start pressed again = just force the bar back (manual fix).
+            if (main != null) main.post(update ? this::updateNow : this::forceShowBar);
             return START_NOT_STICKY;
         }
 
@@ -183,6 +193,8 @@ public class ColorBarService extends Service {
                 new Intent(this, ColorBarService.class).setAction(ACTION_STOP), piFlags);
         PendingIntent openPi = PendingIntent.getActivity(this, 1,
                 new Intent(this, MainActivity.class), piFlags);
+        PendingIntent updatePi = PendingIntent.getService(this, 2,
+                new Intent(this, ColorBarService.class).setAction(ACTION_UPDATE), piFlags);
 
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, CHANNEL_ID)
@@ -192,6 +204,7 @@ public class ColorBarService extends Service {
                 .setContentText("The camera checks the colors every 10 minutes. Tap Stop to turn it off.")
                 .setContentIntent(openPi)
                 .setOngoing(true)
+                .addAction(new Notification.Action.Builder((Icon) null, "Update now", updatePi).build())
                 .addAction(new Notification.Action.Builder((Icon) null, "Stop", stopPi).build());
 
         if (Build.VERSION.SDK_INT >= 30) {
@@ -216,13 +229,11 @@ public class ColorBarService extends Service {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 statusBarHeight(),
                 type,
-                // IMPORTANT: no FLAG_NOT_TOUCHABLE while the strip is showing.
-                // Android 12+ automatically makes "draw over other apps" windows that let
-                // touches pass through them 20% see-through (a safety rule). Without that flag
-                // the strip stays 100% solid. The real status bar sits above our strip,
-                // so it still gets all the touches (pulling down notifications works).
+                // Taps always pass through (so other apps keep working normally).
+                // Android 12+ then makes each such window only 80% solid (a safety rule),
+                // which is why we stack several identical layers below.
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.OPAQUE);   // the window itself can't be see-through
@@ -241,36 +252,19 @@ public class ColorBarService extends Service {
         }
         followStatusBar();
 
-        // Two strips stacked: a plain BLACK strip on the bottom layer, the color strip on top.
-        // Android stacks windows in the order they are added, so the black one goes in first.
-        // If the color strip is ever a little see-through, you see black through it, not the wallpaper.
-        blackBar = new View(this);
-        blackBar.setBackgroundColor(Color.BLACK);
-        blackLp = new WindowManager.LayoutParams();
-        blackLp.copyFrom(lp);
-        wm.addView(blackBar, blackLp);
-
+        // Several IDENTICAL color strips stacked on top of each other.
+        // Each one is 80% solid, so the wallpaper behind shows through
+        // 20% x 20% x 20% x 20% = 0.16%, which is invisible. Because every layer has the
+        // same color, the color itself is not changed at all (no black mixing in).
+        for (int i = 0; i < under.length; i++) {
+            under[i] = new View(this);
+            under[i].setBackgroundColor(Color.BLACK);
+            underLp[i] = new WindowManager.LayoutParams();
+            underLp[i].copyFrom(lp);
+            wm.addView(under[i], underLp[i]);
+        }
         barLp = lp;
-        wm.addView(bar, lp);
-    }
-
-    /**
-     * While the strip is hidden (full-screen video/game) it must not catch any taps,
-     * so we turn "let touches pass through" back on. While it's showing, it stays off
-     * so Android keeps the strip fully solid.
-     */
-    private void setPassTouches(boolean pass) {
-        int f = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        try {
-            if (barLp != null && bar != null) {
-                barLp.flags = pass ? (barLp.flags | f) : (barLp.flags & ~f);
-                wm.updateViewLayout(bar, barLp);
-            }
-            if (blackLp != null && blackBar != null) {
-                blackLp.flags = pass ? (blackLp.flags | f) : (blackLp.flags & ~f);
-                wm.updateViewLayout(blackBar, blackLp);
-            }
-        } catch (Exception ignored) { }
+        wm.addView(bar, lp);   // the top layer (it also listens for the status bar hiding)
     }
 
     /**
@@ -315,8 +309,10 @@ public class ColorBarService extends Service {
 
     private void reattachIfNeeded() {
         try {
-            if (blackBar != null && blackLp != null && !blackBar.isAttachedToWindow()) {
-                wm.addView(blackBar, blackLp);
+            for (int i = 0; i < under.length; i++) {
+                if (under[i] != null && underLp[i] != null && !under[i].isAttachedToWindow()) {
+                    wm.addView(under[i], underLp[i]);
+                }
             }
             if (bar != null && barLp != null && !bar.isAttachedToWindow()) {
                 wm.addView(bar, barLp);   // added after the black one, so it stays on top
@@ -350,11 +346,13 @@ public class ColorBarService extends Service {
 
     private void setBarShown(boolean shown) {
         if (bar == null) return;
-        bar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
-        if (blackBar != null) blackBar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
+        // Setting "Hide during full-screen videos" turned off: the bar always stays.
+        if (prefs != null && !prefs.getBoolean(KEY_HIDE_FULLSCREEN, true)) shown = true;
+        int vis = shown ? View.VISIBLE : View.INVISIBLE;
+        bar.setVisibility(vis);
+        for (View v : under) if (v != null) v.setVisibility(vis);
         if (shown == barShown) return;
         barShown = shown;
-        setPassTouches(!shown);
         if (cam == null) return;
         // Strip hidden -> turn the camera off. Strip back -> turn the camera on again.
         cam.post(() -> {
@@ -389,10 +387,9 @@ public class ColorBarService extends Service {
             fadeFrom = new float[picW * picH * 3];
             out = new int[picW * picH];
             picture = Bitmap.createBitmap(picW, picH, Bitmap.Config.ARGB_8888);
-            BitmapDrawable d = new BitmapDrawable(getResources(), picture);
-            d.setFilterBitmap(true);  // smooth stretching instead of blocky pixels
-            // Solid black underneath the color, so nothing behind can ever show through.
-            bar.setBackground(new LayerDrawable(new Drawable[]{new ColorDrawable(Color.BLACK), d}));
+            // Every layer shows the same picture, so all 4 layers are exactly the same color.
+            bar.setBackground(pictureDrawable());
+            for (View v : under) if (v != null) v.setBackground(pictureDrawable());
             hasColor = false;
         }
         for (int i = 0; i < s.pixels.length; i++) {
@@ -401,8 +398,12 @@ public class ColorBarService extends Service {
             target[i * 3 + 1] = Color.green(c);
             target[i * 3 + 2] = Color.blue(c);
         }
-        if (!hasColor) {
-            // Very first colors: start from them so the bar doesn't fade in from nothing.
+        if (!hasColor || forceNext) {
+            // Very first colors, or the user pressed "Update now":
+            // show the new color immediately, even if it's only a small change.
+            forceNext = false;
+            fading = false;
+            main.removeCallbacks(fadeStep);
             System.arraycopy(target, 0, shown, 0, shown.length);
             hasColor = true;
             paint();
@@ -472,6 +473,25 @@ public class ColorBarService extends Service {
         }
         picture.setPixels(out, 0, picW, 0, 0, picW, picH);
         bar.invalidate();
+        for (View v : under) if (v != null) v.invalidate();
+    }
+
+    private BitmapDrawable pictureDrawable() {
+        BitmapDrawable d = new BitmapDrawable(getResources(), picture);
+        d.setFilterBitmap(true);  // smooth stretching instead of blocky pixels
+        return d;
+    }
+
+    /** "Update now": show the bar, look through the camera right away, show the color at once. */
+    private void updateNow() {
+        forceShowBar();
+        if (cam == null) return;
+        cam.post(() -> {
+            forceNext = true;
+            if (camera != null || opening) return; // a reading is already on its way
+            cam.removeCallbacks(openRunnable);
+            openCamera();
+        });
     }
 
     private void readOpacity() {
@@ -825,9 +845,11 @@ public class ColorBarService extends Service {
             try { wm.removeView(bar); } catch (Exception ignored) { }
             bar = null;
         }
-        if (blackBar != null && wm != null) {
-            try { wm.removeView(blackBar); } catch (Exception ignored) { }
-            blackBar = null;
+        for (int i = 0; i < under.length; i++) {
+            if (under[i] != null && wm != null) {
+                try { wm.removeView(under[i]); } catch (Exception ignored) { }
+                under[i] = null;
+            }
         }
         super.onDestroy();
     }
