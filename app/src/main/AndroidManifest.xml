@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Needed to use the camera. Android will ask you once. -->
+    <!-- Needed to look at your room. Android will ask you once. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Needed to change the wallpaper. Android gives this one automatically. -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
     <application
-        android:label="Snap On Open"
-        android:icon="@android:drawable/ic_menu_camera"
+        android:label="Room Color Wallpaper"
+        android:icon="@android:drawable/ic_menu_gallery"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
             android:name=".MainActivity"

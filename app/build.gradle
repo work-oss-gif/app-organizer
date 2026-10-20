@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'com.snaponopen.app'
+    namespace 'com.roomcolorwallpaper.app'
     compileSdk 34
 
     defaultConfig {
-        applicationId 'com.snaponopen.app'
+        applicationId 'com.roomcolorwallpaper.app'
         minSdk 24
         targetSdk 34
         versionCode 1
