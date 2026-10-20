@@ -1,9 +1,9 @@
 plugins { id 'com.android.application' }
 android {
-    namespace 'com.example.organizer'
+    namespace 'com.example.instantlauncher'
     compileSdk 34
     defaultConfig {
-        applicationId 'com.example.organizer'
+        applicationId 'com.example.instantlauncher'
         minSdk 24
         targetSdk 34
         versionCode 1
