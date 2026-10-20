@@ -5,19 +5,43 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Needed to change the wallpaper. Android gives this one automatically. -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- Keep working in the background (every 10 minutes) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!-- No POST_NOTIFICATIONS on purpose: on Android 13+ the background notification stays hidden. -->
+    <!-- Restart after the tablet turns on (needs "Display over other apps", like Camera Color Bar) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
     <application
         android:label="Room Color Wallpaper"
         android:icon="@android:drawable/ic_menu_gallery"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTask"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".AutoService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

@@ -3,14 +3,11 @@ package com.roomcolorwallpaper.app;
 import android.Manifest;
 import android.app.Activity;
 import android.app.WallpaperManager;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
-import android.graphics.Paint;
-import android.graphics.RadialGradient;
-import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraAccessException;
@@ -19,10 +16,12 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.util.DisplayMetrics;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.Surface;
 import android.view.TextureView;
@@ -32,11 +31,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
 
 /**
  * Room Color Wallpaper: looks at your room through the back camera,
@@ -48,18 +43,20 @@ import java.util.List;
  *     Tap "Capture colors" any time to read them again.
  *  3. It finds the 3 most common, clearly different colors and draws a wallpaper from them.
  *  4. Tap "Home", "Lock" or "Both" to set it as your wallpaper.
+ *  5. Tap "Auto every 10 min" to keep updating that same screen by itself (see AutoService).
  */
 public class MainActivity extends Activity {
 
     private static final int REQ_CAMERA = 1;
     private static final long SETTLE_MS = 1500; // time to let brightness adjust
+    static final String EXTRA_AUTOSTART = "autostart"; // sent after the tablet turns on
 
     // Screen parts
     private TextureView preview;
     private ImageView wallpaperPreview;
     private TextView status;
     private LinearLayout swatchRow;
-    private Button captureBtn, styleBtn, homeBtn, lockBtn, bothBtn;
+    private Button captureBtn, styleBtn, homeBtn, lockBtn, bothBtn, autoBtn, rebootBtn;
     private float density;
 
     // Camera parts
@@ -80,6 +77,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Opened by BootReceiver after the tablet turned on: restart auto updates and close.
+        if (getIntent().getBooleanExtra(EXTRA_AUTOSTART, false)) {
+            if (ColorMaker.prefs(this).getBoolean(ColorMaker.KEY_AUTO, false)) {
+                Intent i = new Intent(this, AutoService.class).putExtra(AutoService.EXTRA_NOW, true);
+                try {
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+                } catch (Exception ignored) { }
+            }
+            finish();
+            return;
+        }
+
+        shapesStyle = ColorMaker.prefs(this).getBoolean(ColorMaker.KEY_SHAPES, false);
         density = getResources().getDisplayMetrics().density;
 
         LinearLayout root = new LinearLayout(this);
@@ -126,11 +137,14 @@ public class MainActivity extends Activity {
         // Buttons.
         LinearLayout row1 = buttonRow(panel);
         captureBtn = addButton(row1, "Capture colors");
-        styleBtn = addButton(row1, "Style: Smooth");
+        styleBtn = addButton(row1, shapesStyle ? "Style: Shapes" : "Style: Smooth");
         LinearLayout row2 = buttonRow(panel);
         homeBtn = addButton(row2, "Set Home");
         lockBtn = addButton(row2, "Set Lock");
         bothBtn = addButton(row2, "Set Both");
+        LinearLayout row3 = buttonRow(panel);
+        autoBtn = addButton(row3, "Auto every 10 min: OFF");
+        rebootBtn = addButton(row3, "Allow restart after reboot");
 
         captureBtn.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { onCapture(); }
@@ -139,21 +153,29 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) {
                 shapesStyle = !shapesStyle;
                 styleBtn.setText(shapesStyle ? "Style: Shapes" : "Style: Smooth");
+                ColorMaker.prefs(MainActivity.this).edit().putBoolean(ColorMaker.KEY_SHAPES, shapesStyle).apply();
                 showResult();
             }
         });
         homeBtn.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { setWallpaper(WallpaperManager.FLAG_SYSTEM, "home screen"); }
+            @Override public void onClick(View v) { setWallpaper(WallpaperManager.FLAG_SYSTEM); }
         });
         lockBtn.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { setWallpaper(WallpaperManager.FLAG_LOCK, "lock screen"); }
+            @Override public void onClick(View v) { setWallpaper(WallpaperManager.FLAG_LOCK); }
         });
         bothBtn.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                setWallpaper(WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK, "home and lock screens");
+                setWallpaper(WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK);
             }
         });
+        autoBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { onAutoButton(); }
+        });
+        rebootBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openOverlaySettings(); }
+        });
         setWallpaperButtonsEnabled(false);
+        updateAutoButtons();
 
         root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
         setContentView(root);
@@ -199,6 +221,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        updateAutoButtons();
+        // Opening the app also restarts auto updates if Android stopped them.
+        if (ColorMaker.prefs(this).getBoolean(ColorMaker.KEY_AUTO, false) && hasCameraPermission()) startAuto(false);
         camThread = new HandlerThread("camera");
         camThread.start();
         camHandler = new Handler(camThread.getLooper());
@@ -355,8 +380,10 @@ public class MainActivity extends Activity {
         }
         Bitmap small = preview.getBitmap(64, 48); // 3,072 dots is plenty to judge colors
         if (small == null) return;
-        int[] found = mainColors(small);
+        int[] px = new int[64 * 48];
+        small.getPixels(px, 0, 64, 0, 0, 64, 48);
         small.recycle();
+        int[] found = ColorMaker.mainColors(px);
         if (found == null) {
             status.setText("Too dark to see colors. Turn on a light and tap Capture colors.");
             return;
@@ -365,62 +392,6 @@ public class MainActivity extends Activity {
         showResult();
         status.setText("These are your room's colors. Pick a style, then set the wallpaper.");
         setWallpaperButtonsEnabled(true);
-    }
-
-    /**
-     * Groups similar colors into "buckets" (8 shades per red, green and blue = 512 buckets),
-     * counts how many dots land in each, then picks the 3 biggest buckets that look
-     * clearly different from each other.
-     */
-    private static int[] mainColors(Bitmap bmp) {
-        int w = bmp.getWidth(), h = bmp.getHeight();
-        int[] px = new int[w * h];
-        bmp.getPixels(px, 0, w, 0, 0, w, h);
-
-        final long[] count = new long[512];
-        long[] sumR = new long[512], sumG = new long[512], sumB = new long[512];
-        long bright = 0;
-        for (int c : px) {
-            int r = Color.red(c), g = Color.green(c), b = Color.blue(c);
-            bright += r + g + b;
-            int key = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
-            count[key]++;
-            sumR[key] += r; sumG[key] += g; sumB[key] += b;
-        }
-        if (bright / (px.length * 3L) < 12) return null; // camera covered or room dark
-
-        List<Integer> keys = new ArrayList<Integer>();
-        for (int k = 0; k < 512; k++) if (count[k] > 0) keys.add(k);
-        Collections.sort(keys, new Comparator<Integer>() {
-            @Override public int compare(Integer a, Integer b) { return Long.compare(count[b], count[a]); }
-        });
-
-        List<Integer> picked = new ArrayList<Integer>();
-        for (int k : keys) {
-            int col = Color.rgb((int) (sumR[k] / count[k]), (int) (sumG[k] / count[k]), (int) (sumB[k] / count[k]));
-            boolean different = true;
-            for (int p : picked) if (distance(p, col) < 70) { different = false; break; }
-            if (different) picked.add(col);
-            if (picked.size() == 3) break;
-        }
-        // Plain room with fewer than 3 colors: add a lighter and a darker shade of the main one.
-        while (picked.size() < 3) {
-            int base = picked.get(0);
-            picked.add(picked.size() == 1 ? mix(base, Color.WHITE, 0.35f) : mix(base, Color.BLACK, 0.35f));
-        }
-        return new int[]{picked.get(0), picked.get(1), picked.get(2)};
-    }
-
-    private static double distance(int a, int b) {
-        int dr = Color.red(a) - Color.red(b), dg = Color.green(a) - Color.green(b), db = Color.blue(a) - Color.blue(b);
-        return Math.sqrt(dr * dr + dg * dg + db * db);
-    }
-
-    private static int mix(int a, int b, float t) {
-        return Color.rgb(
-                (int) (Color.red(a) + (Color.red(b) - Color.red(a)) * t),
-                (int) (Color.green(a) + (Color.green(b) - Color.green(a)) * t),
-                (int) (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t));
     }
 
     /** Shows the 3 color circles and a small preview of the wallpaper. */
@@ -439,56 +410,25 @@ public class MainActivity extends Activity {
             lp.rightMargin = dp(6);
             swatchRow.addView(dot, lp);
         }
-        wallpaperPreview.setImageBitmap(drawWallpaper(dp(70), dp(110)));
+        wallpaperPreview.setImageBitmap(ColorMaker.drawWallpaper(colors, shapesStyle, dp(70), dp(110)));
     }
 
     // ---------------------------------------------------------------- wallpaper
 
-    /** Draws the wallpaper picture from the 3 colors. */
-    private Bitmap drawWallpaper(int w, int h) {
-        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-        if (!shapesStyle) {
-            // Smooth: one color fades into the next, from top-left to bottom-right.
-            paint.setShader(new LinearGradient(0, 0, w, h, colors, null, Shader.TileMode.CLAMP));
-            canvas.drawRect(0, 0, w, h, paint);
-        } else {
-            // Shapes: main color as background, the other two as big soft glowing circles.
-            canvas.drawColor(colors[0]);
-            float big = Math.max(w, h);
-            drawGlow(canvas, paint, w * 0.25f, h * 0.30f, big * 0.55f, colors[1]);
-            drawGlow(canvas, paint, w * 0.80f, h * 0.75f, big * 0.50f, colors[2]);
-            drawGlow(canvas, paint, w * 0.70f, h * 0.15f, big * 0.25f, mix(colors[1], colors[2], 0.5f));
-        }
-        return out;
-    }
-
-    private static void drawGlow(Canvas c, Paint p, float x, float y, float radius, int color) {
-        int clear = color & 0x00FFFFFF; // same color but fully see-through
-        p.setShader(new RadialGradient(x, y, radius, color, clear, Shader.TileMode.CLAMP));
-        c.drawCircle(x, y, radius, p);
-    }
-
-    /** Draws a full-size wallpaper in the background and sets it. */
-    private void setWallpaper(final int which, final String name) {
+    /** Sets the wallpaper now, and remembers which screen you picked for the automatic updates. */
+    private void setWallpaper(final int which) {
         if (colors == null) return;
+        ColorMaker.prefs(this).edit().putInt(ColorMaker.KEY_TARGET, which).apply();
         setWallpaperButtonsEnabled(false);
         status.setText("Setting wallpaper...");
-
-        // Square, as big as the longest side of the screen, so it fits when you turn the tablet.
-        DisplayMetrics dm = new DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getRealMetrics(dm);
-        final int size = Math.max(dm.widthPixels, dm.heightPixels);
+        final int[] c = colors;
+        final boolean shapes = shapesStyle;
 
         new Thread(new Runnable() { @Override public void run() {
             String msg;
             try {
-                Bitmap full = drawWallpaper(size, size);
-                WallpaperManager.getInstance(MainActivity.this).setBitmap(full, null, true, which);
-                full.recycle();
-                msg = "Done! Your " + name + " now matches your room.";
+                ColorMaker.apply(MainActivity.this, c, shapes, which);
+                msg = "Done! Your " + ColorMaker.targetName(which) + " now matches your room.";
             } catch (Exception e) {
                 msg = "Could not set the wallpaper: " + e.getMessage();
             }
@@ -496,7 +436,59 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() { @Override public void run() {
                 status.setText(m);
                 setWallpaperButtonsEnabled(true);
+                updateAutoButtons();
             }});
         }}).start();
+    }
+
+    // ---------------------------------------------------------------- auto every 10 minutes
+
+    private void onAutoButton() {
+        SharedPreferences p = ColorMaker.prefs(this);
+        boolean on = p.getBoolean(ColorMaker.KEY_AUTO, false);
+        if (on) {
+            p.edit().putBoolean(ColorMaker.KEY_AUTO, false).apply();
+            stopService(new Intent(this, AutoService.class));
+            status.setText("Auto is off. Your wallpaper stays as it is.");
+        } else {
+            int which = p.getInt(ColorMaker.KEY_TARGET, 0);
+            if (which == 0) {
+                status.setText("First tap Set Home, Set Lock or Set Both, so the app knows which screen to update.");
+                return;
+            }
+            if (!hasCameraPermission()) { showNoPermission(); return; }
+            p.edit().putBoolean(ColorMaker.KEY_AUTO, true).apply();
+            startAuto(false);
+            status.setText("Auto is on. Every 10 minutes your " + ColorMaker.targetName(which)
+                    + " will update to match your room. You can close the app.");
+        }
+        updateAutoButtons();
+    }
+
+    private void startAuto(boolean now) {
+        Intent i = new Intent(this, AutoService.class).putExtra(AutoService.EXTRA_NOW, now);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+        } catch (Exception e) {
+            status.setText("Could not start auto updates: " + e.getMessage());
+        }
+    }
+
+    private void updateAutoButtons() {
+        SharedPreferences p = ColorMaker.prefs(this);
+        boolean on = p.getBoolean(ColorMaker.KEY_AUTO, false);
+        autoBtn.setText(on ? "Auto every 10 min: ON" : "Auto every 10 min: OFF");
+        // Only needed to restart by itself after the tablet turns on.
+        rebootBtn.setVisibility(on && !Settings.canDrawOverlays(this) ? View.VISIBLE : View.GONE);
+    }
+
+    private void openOverlaySettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
+            status.setText("Turn on \"Allow display over other apps\", then come back.");
+        } catch (Exception e) {
+            status.setText("Open Settings > Apps > Room Color Wallpaper and allow \"Display over other apps\".");
+        }
     }
 }
