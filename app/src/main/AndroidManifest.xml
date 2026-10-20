@@ -8,7 +8,8 @@
     <!-- Keep running in the background with a notification -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- No POST_NOTIFICATIONS on purpose: on Android 13+ this means the app's
+         background notification is never shown. The app keeps running anyway. -->
     <!-- Hear when the tablet finishes starting up -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

@@ -43,6 +43,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -60,10 +61,14 @@ public class ColorBarService extends Service {
     static final String ACTION_STOP = "com.cameracolorbar.app.STOP";
     static final String ACTION_UPDATE = "com.cameracolorbar.app.UPDATE";
     static final String KEY_HIDE_FULLSCREEN = "hide_fullscreen"; // hide the bar during full-screen videos
+    static final String ACTION_LEARN_CASE = "com.cameracolorbar.app.LEARN_CASE";
+    static final String KEY_HAS_CASE = "has_case";
+    static final String KEY_CASE_COLOR = "case_color";
     static final String PREFS = "settings";
     static final String KEY_OPACITY = "opacity"; // 10..100 (percent)
     static final String KEY_AUTOSTART = "autostart"; // start when the tablet turns on
-    private static final String CHANNEL_ID = "colorbar";
+    // "Silent" channel: no sound, no icon in the status bar, tucked at the bottom of the list.
+    private static final String CHANNEL_ID = "colorbar_silent";
     // Timing
     private static final long CHECK_EVERY_MS = 600_000; // look through the camera at most once every 10 minutes
     private static final long SETTLE_MS = 1_500;       // give the camera 1.5 s to adjust brightness first
@@ -84,6 +89,8 @@ public class ColorBarService extends Service {
     private WindowManager.LayoutParams barLp;
     // Set by "Update now": the next reading is shown right away, even if the change is small.
     private volatile boolean forceNext = false;
+    // Set by "Learn my case": the next reading is remembered as the case.
+    private volatile boolean learnCaseNext = false;
     // Fading: over 3 seconds the strip goes from the old colors (fadeFrom) to the new ones (target).
     private static final long FADE_FRAME_MS = 16;   // about 60 small steps per second
     private long fadeStart = 0;
@@ -140,11 +147,15 @@ public class ColorBarService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        boolean update = intent != null && ACTION_UPDATE.equals(intent.getAction());
+        String action = intent != null ? intent.getAction() : null;
         if (running) {
-            // Already running. "Update now" = new reading right away.
+            // Already running. "Update now" = new reading right away. "Learn my case" = save the case.
             // Start pressed again = just force the bar back (manual fix).
-            if (main != null) main.post(update ? this::updateNow : this::forceShowBar);
+            if (main != null) {
+                if (ACTION_UPDATE.equals(action)) main.post(this::updateNow);
+                else if (ACTION_LEARN_CASE.equals(action)) main.post(this::learnCase);
+                else main.post(this::forceShowBar);
+            }
             return START_NOT_STICKY;
         }
 
@@ -186,7 +197,7 @@ public class ColorBarService extends Service {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(new NotificationChannel(
-                    CHANNEL_ID, "Color bar", NotificationManager.IMPORTANCE_LOW));
+                    CHANNEL_ID, "Color bar", NotificationManager.IMPORTANCE_MIN));
         }
         int piFlags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
         PendingIntent stopPi = PendingIntent.getService(this, 0,
@@ -204,6 +215,8 @@ public class ColorBarService extends Service {
                 .setContentText("The camera checks the colors every 10 minutes. Tap Stop to turn it off.")
                 .setContentIntent(openPi)
                 .setOngoing(true)
+                .setShowWhen(false)
+                .setPriority(Notification.PRIORITY_MIN)
                 .addAction(new Notification.Action.Builder((Icon) null, "Update now", updatePi).build())
                 .addAction(new Notification.Action.Builder((Icon) null, "Stop", stopPi).build());
 
@@ -494,9 +507,20 @@ public class ColorBarService extends Service {
     /** "Update now": show the bar, look through the camera right away, show the color at once. */
     private void updateNow() {
         forceShowBar();
+        forceNext = true;
+        readingNow();
+    }
+
+    /** "Learn my case": the next reading is saved as "this is what my case looks like". */
+    private void learnCase() {
+        forceShowBar();
+        learnCaseNext = true;
+        readingNow();
+    }
+
+    private void readingNow() {
         if (cam == null) return;
         cam.post(() -> {
-            forceNext = true;
             if (camera != null || opening) return; // a reading is already on its way
             cam.removeCallbacks(openRunnable);
             openCamera();
@@ -618,7 +642,7 @@ public class ColorBarService extends Service {
             if (SystemClock.uptimeMillis() - sessionStart < SETTLE_MS) return; // still adjusting
             gotReading = true;
             final Slice s = slice(img, imageRotation());
-            if (s != null) main.post(() -> showPicture(s));
+            if (s != null) main.post(() -> handleReading(s));
         } catch (Exception ignored) {
         } finally {
             if (img != null) img.close();
@@ -645,7 +669,62 @@ public class ColorBarService extends Service {
     private static final class Slice {
         final int w, h;
         final int[] pixels;
-        Slice(int w, int h, int[] pixels) { this.w = w; this.h = h; this.pixels = pixels; }
+        final int raw;          // plain average color (no boost)
+        final float brightness; // 0 = black .. 255 = white
+        final float detail;     // how much the brightness varies across the picture
+        final float sharpness;  // how different neighbouring points are
+        Slice(int w, int h, int[] pixels, int raw, float brightness, float detail, float sharpness) {
+            this.w = w; this.h = h; this.pixels = pixels;
+            this.raw = raw; this.brightness = brightness; this.detail = detail; this.sharpness = sharpness;
+        }
+    }
+
+    /**
+     * Decides whether the camera could see the room normally.
+     * Returns null if the picture is fine, otherwise a short reason why it's skipped.
+     */
+    private String whyNotClear(Slice s) {
+        if (s.brightness < 28) {
+            return "the camera sees almost nothing (too dark, covered or in a bag)";
+        }
+        if (s.detail < 6 && s.sharpness < 3) {
+            return "the camera looks blocked (no detail at all)";
+        }
+        if (prefs != null && prefs.getBoolean(KEY_HAS_CASE, false)) {
+            int cc = prefs.getInt(KEY_CASE_COLOR, 0);
+            float dr = Color.red(s.raw) - Color.red(cc);
+            float dg = Color.green(s.raw) - Color.green(cc);
+            float db = Color.blue(s.raw) - Color.blue(cc);
+            float dist = (float) Math.sqrt(dr * dr + dg * dg + db * db);
+            if (dist < 40 && s.detail < 20) {
+                return "the camera is covered by your case";
+            }
+        }
+        return null;
+    }
+
+    /** Main thread: a new reading arrived. Learn the case, skip it, or show it. */
+    private void handleReading(Slice s) {
+        if (learnCaseNext) {
+            learnCaseNext = false;
+            prefs.edit().putBoolean(KEY_HAS_CASE, true).putInt(KEY_CASE_COLOR, s.raw).apply();
+            toast("Case saved. When the camera sees your case, the color won't change.");
+            return;
+        }
+        String why = whyNotClear(s);
+        if (why != null) {
+            // Keep the current color. Only tell the user if they pressed "Update now".
+            if (forceNext) {
+                forceNext = false;
+                toast("Not updated: " + why + ".");
+            }
+            return;
+        }
+        showPicture(s);
+    }
+
+    private void toast(String text) {
+        try { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); } catch (Exception ignored) { }
     }
 
     /**
@@ -694,6 +773,8 @@ public class ColorBarService extends Service {
             // Weighted average: colorful pixels count much more than gray/white/black ones,
             // so the result is the room's main COLOR instead of a muddy gray mix.
             double rs = 0, gs = 0, bs = 0, n = 0;
+            long rawR = 0, rawG = 0, rawB = 0;     // plain average, used to recognise the case
+            int[] lum = new int[grid * grid];      // brightness of every sample point
             for (int a = 0; a < grid; a++) {
                 float u = (z + (a + 0.5f) / grid) / zones;       // 0 = left, 1 = right
                 for (int c = 0; c < grid; c++) {
@@ -721,13 +802,32 @@ public class ColorBarService extends Service {
                     gs += pg * weight;
                     bs += pb * weight;
                     n += weight;
+                    rawR += pr; rawG += pg; rawB += pb;
+                    lum[a * grid + c] = Y;
                 }
             }
             px[z] = boost(Color.rgb((int) (rs / n), (int) (gs / n), (int) (bs / n)));
+
+            // ---- Can the camera see normally? ----
+            int count = grid * grid;
+            double mean = 0;
+            for (int L : lum) mean += L;
+            mean /= count;
+            double var = 0;
+            for (int L : lum) var += (L - mean) * (L - mean);
+            double std = Math.sqrt(var / count);          // how much brightness varies (detail)
+            double edge = 0; int edges = 0;               // how sharp neighbouring points differ
+            for (int a = 0; a < grid; a++) {
+                for (int c = 0; c < grid; c++) {
+                    if (a + 1 < grid) { edge += Math.abs(lum[a * grid + c] - lum[(a + 1) * grid + c]); edges++; }
+                    if (c + 1 < grid) { edge += Math.abs(lum[a * grid + c] - lum[a * grid + c + 1]); edges++; }
+                }
+            }
+            edge /= Math.max(1, edges);
+            int raw = Color.rgb((int) (rawR / count), (int) (rawG / count), (int) (rawB / count));
+            return new Slice(zones, 1, px, raw, (float) mean, (float) std, (float) edge);
         }
-        // A picture "zones" pixels wide and 1 tall. When Android stretches it smoothly
-        // across the strip, neighbouring inches blend into each other like a gradient.
-        return new Slice(zones, 1, px);
+        return null;
     }
 
     /**

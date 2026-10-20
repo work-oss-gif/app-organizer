@@ -142,7 +142,7 @@ public class MainActivity extends Activity {
         });
         col.addView(hideFs);
 
-        col.addView(button("1. Allow camera and notifications", new View.OnClickListener() {
+        col.addView(button("1. Allow camera", new View.OnClickListener() {
             public void onClick(View v) { askPermissions(); }
         }));
         col.addView(button("2. Allow \"Display over other apps\"", new View.OnClickListener() {
@@ -156,6 +156,23 @@ public class MainActivity extends Activity {
         }));
         col.addView(button("Stop", new View.OnClickListener() {
             public void onClick(View v) { stopBar(); }
+        }));
+
+        // ---- Case cover ----
+        TextView caseInfo = new TextView(this);
+        caseInfo.setTextSize(14);
+        caseInfo.setPadding(0, dp(20), 0, 0);
+        caseInfo.setText("Case cover: the color never changes when the camera is too dark or blocked. "
+                + "To teach it your case: press Start, fold the case over the back camera, "
+                + "then tap the button below and keep it covered for 3 seconds.");
+        col.addView(caseInfo);
+        col.addView(button("Learn my case cover", new View.OnClickListener() {
+            public void onClick(View v) { learnCase(); }
+        }));
+
+        // ---- Notification ----
+        col.addView(button("Hide the notification", new View.OnClickListener() {
+            public void onClick(View v) { openNotificationSettings(); }
         }));
 
         setContentView(scroll);
@@ -217,10 +234,7 @@ public class MainActivity extends Activity {
     private void askPermissions() {
         List<String> perms = new ArrayList<>();
         if (!hasCamera()) perms.add(Manifest.permission.CAMERA);
-        if (Build.VERSION.SDK_INT >= 33
-                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            perms.add(Manifest.permission.POST_NOTIFICATIONS);
-        }
+        // We no longer ask for notifications, so the app runs without showing one.
         if (perms.isEmpty()) {
             toast("Already allowed");
             return;
@@ -275,6 +289,37 @@ public class MainActivity extends Activity {
             toast("Updating... the color changes in about 2 seconds");
         } catch (Exception e) {
             toast("Could not update: " + e.getMessage());
+        }
+    }
+
+    private void learnCase() {
+        if (!ColorBarService.running) {
+            toast("Press Start first, then cover the camera with the case and tap again");
+            return;
+        }
+        try {
+            startService(new Intent(this, ColorBarService.class).setAction(ColorBarService.ACTION_LEARN_CASE));
+            toast("Keep the camera covered with the case for 3 seconds...");
+        } catch (Exception e) {
+            toast("Could not learn the case: " + e.getMessage());
+        }
+    }
+
+    /** Opens this app's notification settings, where the user can switch them off. */
+    private void openNotificationSettings() {
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= 26) {
+                i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+            } else {
+                i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName()));
+            }
+            startActivity(i);
+            toast("Turn notifications OFF for Camera Color Bar. The bar keeps working.");
+        } catch (Exception e) {
+            toast("Could not open settings: " + e.getMessage());
         }
     }
 
