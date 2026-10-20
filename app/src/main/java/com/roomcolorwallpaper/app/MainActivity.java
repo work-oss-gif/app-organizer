@@ -56,7 +56,7 @@ public class MainActivity extends Activity {
     private ImageView wallpaperPreview;
     private TextView status;
     private LinearLayout swatchRow;
-    private Button captureBtn, styleBtn, homeBtn, lockBtn, bothBtn, autoBtn, rebootBtn;
+    private Button captureBtn, styleBtn, homeBtn, lockBtn, bothBtn, updateNowBtn, autoBtn, rebootBtn;
     private float density;
 
     // Camera parts
@@ -143,6 +143,7 @@ public class MainActivity extends Activity {
         lockBtn = addButton(row2, "Set Lock");
         bothBtn = addButton(row2, "Set Both");
         LinearLayout row3 = buttonRow(panel);
+        updateNowBtn = addButton(row3, "Update now");
         autoBtn = addButton(row3, "Auto every 10 min: OFF");
         rebootBtn = addButton(row3, "Allow restart after reboot");
 
@@ -167,6 +168,9 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) {
                 setWallpaper(WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK);
             }
+        });
+        updateNowBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { onUpdateNow(); }
         });
         autoBtn.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { onAutoButton(); }
@@ -213,6 +217,7 @@ public class MainActivity extends Activity {
         homeBtn.setEnabled(on);
         lockBtn.setEnabled(on);
         bothBtn.setEnabled(on);
+        updateNowBtn.setEnabled(on || ColorMaker.prefs(this).getInt(ColorMaker.KEY_TARGET, 0) != 0);
         styleBtn.setEnabled(on);
     }
 
@@ -373,25 +378,40 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- colors
 
     /** Takes a tiny copy of what the camera shows and finds the 3 main colors. */
-    private void captureColors() {
+    private boolean captureColors() {
         if (!preview.isAvailable() || camera == null) {
             status.setText("Camera is not ready yet. Try again in a second.");
-            return;
+            return false;
         }
         Bitmap small = preview.getBitmap(64, 48); // 3,072 dots is plenty to judge colors
-        if (small == null) return;
+        if (small == null) return false;
         int[] px = new int[64 * 48];
         small.getPixels(px, 0, 64, 0, 0, 64, 48);
         small.recycle();
         int[] found = ColorMaker.mainColors(px);
         if (found == null) {
-            status.setText("Too dark to see colors. Turn on a light and tap Capture colors.");
-            return;
+            status.setText("Too dark to see colors. Turn on a light and try again.");
+            return false;
         }
         colors = found;
         showResult();
         status.setText("These are your room's colors. Pick a style, then set the wallpaper.");
         setWallpaperButtonsEnabled(true);
+        return true;
+    }
+
+    /**
+     * "Update now" button: reads the room's colors right now and sets them
+     * on the screen you picked before (Home, Lock or Both). One tap, no other steps.
+     */
+    private void onUpdateNow() {
+        int which = ColorMaker.prefs(this).getInt(ColorMaker.KEY_TARGET, 0);
+        if (which == 0) {
+            status.setText("First tap Set Home, Set Lock or Set Both, so the app knows which screen to update.");
+            return;
+        }
+        if (!hasCameraPermission()) { showNoPermission(); return; }
+        if (captureColors()) setWallpaper(which);
     }
 
     /** Shows the 3 color circles and a small preview of the wallpaper. */
