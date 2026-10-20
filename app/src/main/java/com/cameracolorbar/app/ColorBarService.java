@@ -713,11 +713,8 @@ public class ColorBarService extends Service {
         }
         String why = whyNotClear(s);
         if (why != null) {
-            // Keep the current color. Only tell the user if they pressed "Update now".
-            if (forceNext) {
-                forceNext = false;
-                toast("Not updated: " + why + ".");
-            }
+            // Keep the current color, silently (no message).
+            forceNext = false;
             return;
         }
         showPicture(s);
