@@ -1,0 +1,522 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>Sysadmin Pro</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a single phone-width column; home is a vertical lesson path per course, lessons open as a full-screen card flow. */
+:root{
+  --bg:#EDF2F1; --surface:#FFFFFF; --ink:#18233A; --muted:#5B6780; --line:#D5DBE6;
+  --accent:#0E7466; --accent-ink:#FFFFFF; --accent-soft:#DCEFEB;
+  --amber:#D98A1C; --good:#1A8F61; --good-bg:#DDF3EA; --bad:#C93B33; --bad-bg:#FBE3E1;
+  --code-bg:#E9EDF5;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0C1716; --surface:#142321; --ink:#E7ECF5; --muted:#93A0BA; --line:#2A3550;
+  --accent:#45C9B6; --accent-ink:#06201C; --accent-soft:#12322E;
+  --amber:#F5B456; --good:#3CC48D; --good-bg:#123026; --bad:#FF746B; --bad-bg:#3A1C1E;
+  --code-bg:#0F1830; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0C1716; --surface:#142321; --ink:#E7ECF5; --muted:#93A0BA; --line:#2A3550;
+  --accent:#45C9B6; --accent-ink:#06201C; --accent-soft:#12322E;
+  --amber:#F5B456; --good:#3CC48D; --good-bg:#123026; --bad:#FF746B; --bad-bg:#3A1C1E;
+  --code-bg:#0F1830; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--code-bg);padding:.1em .4em;border-radius:5px;white-space:nowrap}
+.wrap{max-width:560px;margin:0 auto;padding-block:18px 60px}
+
+/* Top bar */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:800;font-size:1.35rem;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand .prompt{font-family:var(--f-mono);font-size:.8rem;background:var(--ink);color:var(--bg);padding:3px 7px;border-radius:6px}
+.stats{display:flex;gap:8px}
+.stat{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat svg{width:16px;height:16px}
+.stat.streak{color:var(--amber)} .stat.xp{color:var(--accent)}
+
+.goal{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:8px}
+.goal-row{display:flex;justify-content:space-between;font-size:.92rem;color:var(--muted)}
+.goal-row b{color:var(--ink)}
+.bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--amber);border-radius:99px;transition:width .4s}
+
+.tabs{display:flex;gap:6px;margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
+.tabs button{flex:1;border:0;background:none;padding:8px;border-radius:9px;font-weight:600;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+
+/* Course list */
+.courses{display:grid;gap:14px;margin-top:18px}
+.course{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.course-head{display:flex;gap:12px;align-items:center;width:100%;border:0;background:none;padding:14px 16px;text-align:left}
+.tag{font-family:var(--f-mono);font-weight:700;font-size:.78rem;min-width:52px;height:44px;display:grid;place-items:center;border-radius:10px;background:var(--accent-soft);color:var(--accent);padding:0 6px}
+.course-title{font-family:var(--f-display);font-weight:600;font-size:1.12rem;line-height:1.2}
+.course-sub{font-size:.85rem;color:var(--muted)}
+.course-meta{margin-left:auto;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.course-body{min-width:0;flex:1}
+.path{display:grid;gap:4px;padding:6px 16px 18px}
+.node{display:flex;align-items:center;gap:14px;border:0;background:none;padding:6px 0;text-align:left;width:100%}
+.node:nth-child(2){padding-left:34px} .node:nth-child(3){padding-left:68px}
+.dot{flex:none;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-family:var(--f-display);font-size:1.1rem;
+  background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 0 color-mix(in srgb, var(--accent) 60%, #000)}
+.node.done .dot{background:var(--good);box-shadow:0 4px 0 color-mix(in srgb, var(--good) 60%, #000);color:var(--surface)}
+.node.locked{cursor:not-allowed}
+.node.locked .dot{background:var(--line);color:var(--muted);box-shadow:0 4px 0 color-mix(in srgb, var(--line) 70%, #000)}
+.node-name{font-weight:600}
+.node-sub{font-size:.82rem;color:var(--muted)}
+.node:not(.locked):hover .dot{transform:translateY(-2px)}
+
+/* Cheat sheet */
+.sheet{display:grid;gap:14px;margin-top:18px}
+.sheet section{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.sheet h3{margin:0 0 8px;font-family:var(--f-display);font-weight:600;font-size:1.05rem}
+.cmd{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;padding:8px 0;border-top:1px solid var(--line)}
+.cmd:first-of-type{border-top:0}
+.cmd code{white-space:normal;word-break:break-word;justify-self:start}
+.cmd span{font-size:.88rem;color:var(--muted)}
+.note{font-size:.88rem;color:var(--muted);margin-top:14px}
+
+/* Lesson overlay */
+.lesson{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top,0px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px))}
+.l-top{max-width:560px;width:100%;margin:0 auto;display:flex;align-items:center;gap:12px;padding-block:14px}
+.x{border:0;background:none;width:36px;height:36px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.x svg{width:22px;height:22px}
+.l-top .bar{flex:1;height:12px}
+.l-top .bar>i{background:var(--good)}
+.l-main{flex:1;overflow-y:auto;max-width:560px;width:100%;margin:0 auto;padding-block:8px 24px}
+.kicker{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.l-main h2{font-family:var(--f-display);font-weight:800;font-size:1.6rem;line-height:1.15;margin:6px 0 14px;text-wrap:balance}
+.teach p{margin:0 0 12px;max-width:65ch}
+.teach ul{margin:0 0 12px;padding-left:20px}
+.teach li{margin-bottom:6px}
+.term{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-family:var(--f-mono);font-size:.86rem;overflow-x:auto;white-space:pre;margin:4px 0 14px}
+.term .p{color:var(--accent)}
+.tip{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:.94rem;margin-top:6px}
+.tip b{color:var(--accent)}
+.q{font-size:1.12rem;font-weight:600;margin:0 0 16px;max-width:65ch}
+.opts{display:grid;gap:10px}
+.opt{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;text-align:left;font-weight:500;box-shadow:0 3px 0 var(--line)}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.opt.right{border-color:var(--good);background:var(--good-bg)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-bg)}
+.fill{width:100%;font-family:var(--f-mono);font-size:1rem;padding:14px;border-radius:12px;border:2px solid var(--line);background:var(--surface);color:var(--ink)}
+.fill:focus{border-color:var(--accent);outline:none}
+.build{min-height:58px;border-bottom:2px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;margin-bottom:16px;align-content:flex-start}
+.pool{display:flex;flex-wrap:wrap;gap:8px}
+.tok{font-family:var(--f-mono);font-size:.9rem;border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;box-shadow:0 3px 0 var(--line)}
+.tok.used{visibility:hidden}
+.hint{font-size:.85rem;color:var(--muted);margin-top:10px}
+
+.l-foot{border-top:1px solid var(--line);background:var(--surface);padding:14px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px, env(safe-area-inset-left, 0px));
+  margin:0 calc(-1 * max(16px, env(safe-area-inset-right, 0px))) 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px)))}
+.l-foot.good{background:var(--good-bg)} .l-foot.bad{background:var(--bad-bg)}
+.foot-in{max-width:560px;margin:0 auto;display:grid;gap:10px}
+.fb-title{font-family:var(--f-display);font-weight:800;font-size:1.2rem}
+.l-foot.good .fb-title{color:var(--good)} .l-foot.bad .fb-title{color:var(--bad)}
+.fb-text{font-size:.95rem}
+.go{border:0;border-radius:12px;padding:14px;font-weight:700;font-size:1rem;background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 0 color-mix(in srgb, var(--accent) 55%, #000)}
+.go:disabled{background:var(--line);color:var(--muted);box-shadow:none;cursor:default}
+.l-foot.good .go{background:var(--good);color:var(--surface);box-shadow:0 4px 0 color-mix(in srgb, var(--good) 55%, #000)}
+.l-foot.bad .go{background:var(--bad);color:var(--surface);box-shadow:0 4px 0 color-mix(in srgb, var(--bad) 55%, #000)}
+
+.done-screen{text-align:center;padding-top:30px}
+.done-screen .big{font-family:var(--f-display);font-weight:800;font-size:3.2rem;color:var(--amber);line-height:1}
+.done-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0}
+.done-grid div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 6px}
+.done-grid b{display:block;font-family:var(--f-display);font-size:1.4rem;font-variant-numeric:tabular-nums}
+.done-grid span{font-size:.8rem;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap" id="home">
+  <header class="top">
+    <div class="brand"><span class="prompt">PS&gt;_</span> Sysadmin Pro</div>
+    <div class="stats">
+      <div class="stat streak" title="Day streak"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 4 5 5.5 5 10.5A5 5 0 0 1 7 13c0-2 1-3.5 2-4.5.3 2 1.3 3 2.3 3C11 9 10 6 12 2z"/></svg><span id="sStreak">0</span></div>
+      <div class="stat xp" title="Total XP"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span id="sXp">0</span></div>
+    </div>
+  </header>
+  <div class="goal">
+    <div class="goal-row"><span>Daily goal</span><span><b id="gNow">0</b> / 30 XP</span></div>
+    <div class="bar"><i id="gBar" style="width:0%"></i></div>
+  </div>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabLearn" aria-selected="true">Learn</button>
+    <button role="tab" id="tabSheet" aria-selected="false">Cheat sheet</button>
+  </div>
+  <div id="viewLearn" class="courses"></div>
+  <div id="viewSheet" class="sheet" hidden></div>
+</div>
+
+<div class="lesson" id="lesson" hidden>
+  <div class="l-top">
+    <button class="x" id="quit" aria-label="Close lesson"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <div class="bar"><i id="lBar" style="width:0%"></i></div>
+  </div>
+  <div class="l-main" id="lMain"></div>
+  <div class="l-foot" id="lFoot"><div class="foot-in">
+    <div id="fb" hidden><div class="fb-title" id="fbTitle"></div><div class="fb-text" id="fbText"></div></div>
+    <button class="go" id="go">Continue</button>
+  </div></div>
+</div>
+
+<script>
+/* ---------- Content ----------
+ Card types: t (teach), mc (multiple choice), fill (type answer), order (tap to build) */
+const COURSES = [
+{id:"psp", tag:"PS>", title:"PowerShell Scripting", sub:"From one-liners to real scripts", lessons:[
+ {title:"Functions & parameters", sub:"Make reusable tools", cards:[
+  {t:"Turn commands into tools", body:`<p>A **function** wraps commands under one name so you can reuse them. A **param** block lists the inputs it accepts.</p><div class="term">function Get-UserInfo {
+    param(
+        [Parameter(Mandatory)]
+        [string]$UserName
+    )
+    Get-ADUser $UserName -Properties Department, Title
+}
+
+<span class="p">PS&gt;</span> Get-UserInfo -UserName jsmith</div><ul><li>**[Parameter(Mandatory)]**: PowerShell asks for the value if you forget it.</li><li>**[string]**: the type of value expected.</li><li>Name functions **Verb-Noun**, like built-in cmdlets. <code>Get-Verb</code> lists the approved verbs.</li></ul><p>Save it in a <code>.ps1</code> file and run it with <code>.\\script.ps1</code>.</p>`},
+  {mc:"What does the `param()` block do?", o:["Runs the function","Lists the inputs the function accepts","Imports a module","Stops errors"], a:1, why:"param() declares the function's inputs, like -UserName. Callers pass values through them."},
+  {mc:"What happens if a parameter is marked [Parameter(Mandatory)] and you don't give it?", o:["The function crashes","PowerShell prompts you for the value","It uses an empty value silently","It skips the function"], a:1, why:"Mandatory parameters make PowerShell ask for the missing value before running."},
+  {fill:"Which cmdlet lists the approved verbs for function names?", ans:["get-verb"], ph:"type here…", why:"Get-Verb shows approved verbs like Get, Set, New, Remove. Using them keeps your tools easy to guess."}
+ ]},
+ {title:"Bulk jobs with CSV", sub:"Onboard 50 people in one go", cards:[
+  {t:"CSV in, accounts out", body:`<p>HR sends a spreadsheet. Save it as CSV and let PowerShell loop through every row.</p><div class="term">Name,Sam,Department
+Ana Lopez,alopez,Sales
+Ben Ortiz,bortiz,Warehouse</div><div class="term"><span class="p">PS&gt;</span> Import-Csv .\\newhires.csv | ForEach-Object {
+    New-ADUser -Name $_.Name -SamAccountName $_.Sam -Department $_.Department
+}</div><ul><li><code>Import-Csv</code> turns each row into an object. Column headers become property names.</li><li><code>$_.Department</code> reads the Department column of the current row.</li><li><code>Export-Csv report.csv -NoTypeInformation</code> saves results back to a file.</li></ul>`, tip:"Test with -WhatIf first, e.g. New-ADUser ... -WhatIf. It shows each account it would create without creating anything."},
+  {order:"Build the start of a loop over every row in newhires.csv.", tokens:["Import-Csv",".\\newhires.csv","|","ForEach-Object","Export-Csv"], ans:["Import-Csv",".\\newhires.csv","|","ForEach-Object"], why:"Import-Csv reads the rows, and the pipe sends each one to ForEach-Object."},
+  {mc:"Your CSV has a column called Department. Inside ForEach-Object, how do you read it?", o:["$Department","$_.Department","Department[$_]","$row(Department)"], a:1, why:"$_ is the current row and .Department is its column."},
+  {fill:"Which cmdlet saves results to a CSV file?", ans:["export-csv"], ph:"type here…", why:"Export-Csv writes objects to a CSV file. Add -NoTypeInformation for a clean first line."}
+ ]},
+ {title:"Errors & remoting", sub:"try/catch and many PCs at once", cards:[
+  {t:"Handle errors, reach other computers", body:`<p>**try/catch** runs a fallback when something fails. The catch: most cmdlet errors are **non-terminating**, so <code>catch</code> never sees them. Add <code>-ErrorAction Stop</code> to make them catchable.</p><div class="term">try {
+    Get-ADUser $name -ErrorAction Stop
+} catch {
+    Write-Warning "User $name not found"
+}</div><p>**Remoting** runs commands on other computers:</p><div class="term"><span class="p">PS&gt;</span> Invoke-Command -ComputerName PC01,PC02 -ScriptBlock { Get-Service Spooler }
+<span class="p">PS&gt;</span> Enter-PSSession -ComputerName PC01</div><p><code>Invoke-Command</code> runs on many machines at once. <code>Enter-PSSession</code> gives you a live prompt on one machine.</p>`},
+  {mc:"Your catch block never runs even though Get-ADUser shows a red error. Why?", o:["catch is broken in PowerShell","The error is non-terminating; add -ErrorAction Stop","You need two catch blocks","Red errors can't be caught"], a:1, why:"Non-terminating errors are printed but don't trigger catch. -ErrorAction Stop turns them into terminating errors."},
+  {mc:"You need to restart the Spooler on 40 PCs. Best tool?", o:["Remote Desktop into each one","Invoke-Command -ComputerName with a list","Enter-PSSession 40 times","Email the users"], a:1, why:"Invoke-Command runs the same script block on many computers in parallel."},
+  {fill:"Which cmdlet opens an interactive remote prompt on one computer?", ans:["enter-pssession"], ph:"type here…", why:"Enter-PSSession gives you a prompt on the remote machine. Type Exit-PSSession to leave."}
+ ]}
+]},
+{id:"netp", tag:"NET", title:"Networking Pro", sub:"Subnets, VLANs, DNS records", lessons:[
+ {title:"Subnetting", sub:"Read /24, /25, /26 instantly", cards:[
+  {t:"CIDR made simple", body:`<p>The number after the slash says how many bits are the **network** part. The rest are for hosts.</p><p>Addresses in a subnet = <code>2^(32 − prefix)</code>. Usable hosts = that minus 2, because the first is the **network address** and the last is the **broadcast**.</p><div class="term">/24  255.255.255.0     256 addresses  254 usable
+/25  255.255.255.128   128 addresses  126 usable
+/26  255.255.255.192    64 addresses   62 usable
+/27  255.255.255.224    32 addresses   30 usable</div><p>Two devices can talk directly only if they're in the **same subnet**. Otherwise traffic goes through a router.</p>`},
+  {mc:"How many usable host addresses does a /26 give you?", o:["64","62","126","30"], a:1, why:"/26 has 2^6 = 64 addresses. Minus network and broadcast = 62 usable."},
+  {mc:"What subnet mask matches /24?", o:["255.255.0.0","255.255.255.0","255.255.255.128","255.0.0.0"], a:1, why:"24 bits of 1s = 255.255.255.0."},
+  {mc:"Are 192.168.1.10/24 and 192.168.2.10/24 in the same subnet?", o:["Yes","No, the third number differs, so a router is needed","Only on Wi-Fi","Yes, if DNS works"], a:1, why:"With /24 the first three numbers must match. 1 vs 2 means different subnets."}
+ ]},
+ {title:"VLANs", sub:"Many networks on one switch", cards:[
+  {t:"Virtual LANs", body:`<p>A **VLAN** splits one physical switch into separate networks, for example VLAN 10 for office PCs, VLAN 20 for warehouse scanners, VLAN 30 for printers.</p><ul><li>**Access port**: belongs to one VLAN. Used for PCs and printers.</li><li>**Trunk port**: carries many VLANs, each tagged with its number (802.1Q). Used between switches and to Wi-Fi access points.</li><li>VLANs can't talk to each other without a **router or Layer 3 switch** (inter-VLAN routing).</li></ul><p>DHCP requests don't cross VLANs by themselves. If the DHCP server is in another VLAN, the router needs a **DHCP relay** (on Cisco: <code>ip helper-address</code>).</p>`},
+  {mc:"A Wi-Fi access point needs to serve the office VLAN and the guest VLAN. What kind of port does it plug into?", o:["Access port","Trunk port","Console port","Any port, VLANs don't matter"], a:1, why:"A trunk carries several tagged VLANs on one cable."},
+  {mc:"PCs in VLAN 20 get 169.254 addresses. The DHCP server is in VLAN 10. What's missing?", o:["A new DHCP server per PC","DHCP relay (ip helper-address) on the VLAN 20 gateway","A bigger subnet","DNS records"], a:1, why:"DHCP broadcasts stay inside a VLAN. A relay forwards them to the server in VLAN 10."},
+  {mc:"What does an access port carry?", o:["Every VLAN","One VLAN, untagged","Only voice","Only management traffic"], a:1, why:"An access port belongs to a single VLAN, and the device on it doesn't see VLAN tags."}
+ ]},
+ {title:"DNS records", sub:"A, CNAME, MX, PTR, SRV", cards:[
+  {t:"The record types you'll use", body:`<div class="term">A      name → IPv4 address        fileserver → 10.0.5.20
+AAAA   name → IPv6 address
+CNAME  alias → another name        intranet → web01
+MX     where email for a domain goes
+PTR    IP → name (reverse lookup)
+SRV    where a service lives       _ldap._tcp → domain controllers</div><p>Every record has a **TTL** (time to live): how long other computers may cache it. Lower the TTL a day before a planned change so the new value spreads quickly.</p><p>Active Directory depends on **SRV records** so PCs can find domain controllers. Broken DNS often looks like broken AD.</p>`},
+  {mc:"Which record tells the internet where to deliver email for your domain?", o:["A","CNAME","MX","PTR"], a:2, why:"MX (Mail Exchanger) points to the mail servers for a domain."},
+  {mc:"You want `helpdesk.company.com` to point at the existing name `web01.company.com`. Which record?", o:["A","CNAME","MX","SRV"], a:1, why:"CNAME makes one name an alias of another name."},
+  {fill:"Which record type maps an IP address back to a name?", ans:["ptr"], ph:"type here…", why:"PTR records live in reverse lookup zones and answer 'what name has this IP?'."}
+ ]}
+]},
+{id:"adp", tag:"AD+", title:"Active Directory Deep Dive", sub:"GPO order, replication, FSMO", lessons:[
+ {title:"Group Policy order", sub:"Who wins when settings clash", cards:[
+  {t:"L-S-D-OU", body:`<p>Group Policy applies in this order: **Local → Site → Domain → OU** (parent OU, then child OU). Each layer can overwrite the one before, so **the last one applied wins**, usually the OU closest to the object.</p><ul><li>**Enforced** on a GPO: it wins even over lower OUs.</li><li>**Block inheritance** on an OU: stops higher GPOs (except Enforced ones).</li><li>**Computer settings** apply at startup; **user settings** at sign-in.</li></ul><div class="term"><span class="p">C:\\&gt;</span> gpresult /r
+<span class="p">C:\\&gt;</span> gpresult /h report.html</div><p><code>gpresult</code> shows which GPOs actually applied to this user and PC, and which were filtered out.</p>`},
+  {order:"Put Group Policy processing in the right order (first to last).", tokens:["Local","Site","Domain","OU"], ans:["Local","Site","Domain","OU"], shuffle:true, why:"Local, Site, Domain, then OU. The last applied wins, so OU settings usually win."},
+  {mc:"A domain GPO sets the wallpaper to blue. An OU GPO sets it to red. Neither is Enforced. What does the user get?", o:["Blue","Red","Whichever was created first","No wallpaper"], a:1, why:"The OU applies after the domain, so its setting wins."},
+  {fill:"Which command shows the GPOs applied to the current user and computer? (include the switch)", ans:["gpresult /r","gpresult /h report.html"], ph:"type here…", why:"gpresult /r prints a summary. /h saves a detailed HTML report."}
+ ]},
+ {title:"Replication & sites", sub:"Why changes take time", cards:[
+  {t:"Many DCs, one directory", body:`<p>Every **domain controller (DC)** holds a copy of AD. Changes made on one DC **replicate** to the others. Inside one site this takes seconds; between sites it follows a schedule, often every 15 minutes or more.</p><p>**AD Sites and Services** maps IP **subnets** to **sites**, so PCs sign in to a DC in their own building instead of across the country.</p><div class="term"><span class="p">C:\\&gt;</span> repadmin /replsummary
+<span class="p">C:\\&gt;</span> repadmin /syncall /AdeP</div><p><code>/replsummary</code> shows replication health. <code>/syncall</code> pushes changes now.</p>`, tip:"A new subnet that isn't added to Sites and Services is a common cause of slow logons at a new office."},
+  {mc:"You reset a password in New Jersey. A user in California still can't sign in for 10 minutes. Likely cause?", o:["The password is wrong","Replication between sites hasn't happened yet","The user's PC is broken","DNS is down"], a:1, why:"The California DC hasn't received the change yet. It will after the next replication, or you can force a sync."},
+  {fill:"Which command shows a summary of AD replication health?", ans:["repadmin /replsummary"], ph:"type here…", why:"repadmin /replsummary lists each DC, its last successful replication and any failures."},
+  {mc:"Why add office subnets to AD Sites and Services?", o:["To speed up the internet","So PCs use the nearest domain controller","To make printers work","To license Windows"], a:1, why:"Subnets tell AD which site a PC is in, so it picks a local DC."}
+ ]},
+ {title:"FSMO roles", sub:"The five special jobs", cards:[
+  {t:"Five roles, held by specific DCs", body:`<p>Most AD changes can happen on any DC. Five jobs can only be done by one DC at a time. These are the **FSMO roles**:</p><p>**Forest-wide (one each per forest):**</p><ul><li>**Schema Master**: changes to the AD schema.</li><li>**Domain Naming Master**: adding or removing domains.</li></ul><p>**Domain-wide (one each per domain):**</p><ul><li>**RID Master**: hands out ID pools so new objects get unique IDs.</li><li>**PDC Emulator**: the time source, urgent password changes and account lockouts.</li><li>**Infrastructure Master**: keeps cross-domain references up to date.</li></ul><div class="term"><span class="p">C:\\&gt;</span> netdom query fsmo</div>`},
+  {mc:"Which role is the domain's main time source and handles account lockouts?", o:["Schema Master","RID Master","PDC Emulator","Infrastructure Master"], a:2, why:"The PDC Emulator is the authoritative time source and processes password changes and lockouts first."},
+  {mc:"How many FSMO roles are there?", o:["3","5","7","One per DC"], a:1, why:"Five: Schema Master, Domain Naming Master, RID Master, PDC Emulator and Infrastructure Master."},
+  {fill:"Which command shows which DCs hold the FSMO roles?", ans:["netdom query fsmo"], ph:"type here…", why:"netdom query fsmo lists all five roles and their current holders."}
+ ]}
+]},
+{id:"srv", tag:"SRV", title:"Servers & Storage", sub:"VMs, RAID and backups", lessons:[
+ {title:"Virtual machines", sub:"Hosts, guests, checkpoints", cards:[
+  {t:"How virtualization works", body:`<p>A **hypervisor** lets one physical server (the **host**) run many **virtual machines** (the **guests**), each with its own OS.</p><ul><li>**Type 1** hypervisors run directly on the hardware: Hyper-V, VMware ESXi. Used for servers.</li><li>**Type 2** run as an app on a normal OS: VirtualBox, VMware Workstation. Used for testing.</li></ul><p>A **checkpoint** (snapshot) saves a VM's state so you can roll back after a bad update. It is **not a backup**: it lives on the same storage and depends on the original disk. Delete checkpoints after you're done, because they keep growing.</p>`},
+  {mc:"Why isn't a checkpoint a backup?", o:["It's too small","It sits on the same storage and depends on the original disk","Checkpoints can't be restored","It only saves memory"], a:1, why:"If the storage fails, the VM and its checkpoints are lost together."},
+  {mc:"Which is a Type 1 hypervisor?", o:["VirtualBox","Hyper-V","VMware Workstation","Chrome"], a:1, why:"Hyper-V runs directly on the hardware, below the Windows that manages it."},
+  {mc:"The physical server that runs the VMs is called the…", o:["Guest","Host","Client","Container"], a:1, why:"The host provides CPU, memory and storage. The VMs running on it are guests."}
+ ]},
+ {title:"RAID", sub:"Disks working together", cards:[
+  {t:"Common RAID levels", body:`<div class="term">RAID 0   stripe        fast, NO protection      min 2 disks
+RAID 1   mirror        survives 1 disk loss     2 disks, half the space
+RAID 5   parity        survives 1 disk loss     min 3, lose 1 disk of space
+RAID 10  mirror+stripe fast and safe            min 4, half the space</div><p>Usable space for RAID 5 = <code>(number of disks − 1) × disk size</code>.</p><p>RAID protects against a **disk failing**. It does not protect against deleting a file, ransomware or a fire, because every change is copied instantly. **RAID is not a backup.**</p>`},
+  {mc:"Four 2 TB disks in RAID 5. How much usable space?", o:["8 TB","6 TB","4 TB","2 TB"], a:1, why:"RAID 5 uses one disk's worth for parity: (4 − 1) × 2 TB = 6 TB."},
+  {mc:"Which RAID level gives no protection at all?", o:["RAID 0","RAID 1","RAID 5","RAID 10"], a:0, why:"RAID 0 only stripes for speed. If one disk dies, all data is lost."},
+  {mc:"Two 1 TB disks in RAID 1. Usable space?", o:["2 TB","1 TB","500 GB","1.5 TB"], a:1, why:"RAID 1 mirrors, so both disks hold the same data: 1 TB usable."}
+ ]},
+ {title:"Backups", sub:"3-2-1, RPO and RTO", cards:[
+  {t:"Backups that actually save you", body:`<p>**The 3-2-1 rule:** 3 copies of the data, on 2 different kinds of storage, with 1 copy offsite (or in the cloud).</p><ul><li>**RPO** (Recovery Point Objective): how much data you can afford to lose. Nightly backups = up to 24 hours of work lost.</li><li>**RTO** (Recovery Time Objective): how long you can be down while restoring.</li></ul><p>**Backup types:**</p><ul><li>**Full**: everything.</li><li>**Incremental**: changes since the **last backup of any kind**. Small, but a restore needs the full plus every incremental.</li><li>**Differential**: changes since the **last full**. Grows daily, but a restore needs only the full plus the latest differential.</li></ul>`, tip:"A backup you've never restored is a guess. Test a restore regularly."},
+  {mc:"What does RPO measure?", o:["How fast the backup runs","How much data you can afford to lose","How many disks you need","The backup's price"], a:1, why:"RPO is the acceptable data loss window. RTO is the acceptable downtime."},
+  {mc:"Which backup type copies changes since the last FULL backup?", o:["Incremental","Differential","Snapshot","Mirror"], a:1, why:"Differential = since last full. Incremental = since the last backup of any type."},
+  {mc:"When do you really know a backup works?", o:["When the job shows green","When you've successfully restored from it","When the disk is full","After a week"], a:1, why:"Only a test restore proves the data is complete and usable."}
+ ]}
+]},
+{id:"cld", tag:"CLD", title:"Cloud Admin", sub:"Entra ID, Intune, Exchange Online", lessons:[
+ {title:"Hybrid identity", sub:"On-prem AD + Entra ID", cards:[
+  {t:"Syncing AD to the cloud", body:`<p>**Microsoft Entra ID** (formerly Azure AD) is the cloud directory behind Microsoft 365. Many companies keep their users in on-prem AD and sync them up with **Entra Connect**.</p><ul><li>Sync runs automatically about every **30 minutes**.</li><li>Force a sync now on the Entra Connect server:</li></ul><div class="term"><span class="p">PS&gt;</span> Start-ADSyncSyncCycle -PolicyType Delta</div><p>For a **synced** user, on-prem AD is the source of truth. Edit their name, title or department in AD, not in the cloud portal. Cloud edits to those fields are blocked or overwritten.</p>`},
+  {mc:"A synced user's job title is wrong in Teams. Where do you fix it?", o:["In Teams settings","In on-prem Active Directory","In the user's Outlook","In Intune"], a:1, why:"Synced attributes come from on-prem AD. Change it there and it flows up on the next sync."},
+  {fill:"Which cmdlet forces an Entra Connect sync? (just the cmdlet name)", ans:["start-adsyncsynccycle","start-adsyncsynccycle -policytype delta"], ph:"type here…", why:"Start-ADSyncSyncCycle -PolicyType Delta syncs just the recent changes."},
+  {mc:"How often does Entra Connect sync by default?", o:["Every 5 minutes","Every 30 minutes","Once a day","Only when you click"], a:1, why:"The default schedule is about every 30 minutes."}
+ ]},
+ {title:"Intune & Autopilot", sub:"Set up laptops without touching them", cards:[
+  {t:"Cloud device management", body:`<p>**Intune** manages Windows, iPhone and Android devices from the cloud: settings, apps and updates.</p><p>**Windows Autopilot** lets a new laptop ship straight to the user. They turn it on, sign in with their work account, and it sets itself up with the company's apps and settings.</p><ul><li>The device must be registered first using its **hardware hash** (vendors can do this for you).</li><li>Apps deployed as **Required** install automatically.</li><li>Apps deployed as **Available** show up in the **Company Portal** for users to install when they want.</li></ul>`},
+  {mc:"What's the main benefit of Autopilot?", o:["Faster internet","New laptops set themselves up when the user signs in","Free licenses","It replaces Active Directory"], a:1, why:"IT doesn't have to image each laptop. It configures itself from Intune."},
+  {mc:"An app is assigned as Available. How does the user get it?", o:["It installs on its own","They install it from the Company Portal","IT emails the installer","It can't be installed"], a:1, why:"Available apps are optional and offered in the Company Portal."},
+  {mc:"What identifies a device for Autopilot registration?", o:["The user's email","The hardware hash","The Wi-Fi name","The monitor serial"], a:1, why:"The hardware hash uniquely identifies the machine so Autopilot knows it belongs to your company."}
+ ]},
+ {title:"Exchange Online PowerShell", sub:"Mailbox jobs in seconds", cards:[
+  {t:"Manage mail from the command line", body:`<div class="term"><span class="p">PS&gt;</span> Connect-ExchangeOnline
+<span class="p">PS&gt;</span> Add-MailboxPermission -Identity support -User jsmith -AccessRights FullAccess
+<span class="p">PS&gt;</span> Set-Mailbox -Identity jdoe -Type Shared
+<span class="p">PS&gt;</span> Get-Mailbox -ResultSize Unlimited | Select-Object DisplayName, PrimarySmtpAddress</div><ul><li><code>Add-MailboxPermission</code>: gives someone full access to another mailbox. **-Identity** is the mailbox, **-User** is the person.</li><li><code>Set-Mailbox -Type Shared</code>: converts a leaver's mailbox to shared so the manager can read it and the license can be removed.</li></ul><p>To check whether an email was delivered, run a **message trace** in the Exchange admin center.</p>`},
+  {order:"Give jsmith full access to the support mailbox.", tokens:["Add-MailboxPermission","-Identity","support","-User","jsmith","-AccessRights","FullAccess","Set-Mailbox"], ans:["Add-MailboxPermission","-Identity","support","-User","jsmith","-AccessRights","FullAccess"], why:"-Identity is the mailbox being opened, -User is who gets access."},
+  {mc:"How do you turn a leaver's mailbox into a shared mailbox?", o:["Remove-Mailbox","Set-Mailbox -Type Shared","New-Mailbox -Shared","Disable-Mailbox"], a:1, why:"Set-Mailbox -Type Shared converts it while keeping all the email."},
+  {mc:"A customer says an order email never arrived. How do you check if it was delivered?", o:["Ask them to restart","Run a message trace in the Exchange admin center","Recreate the mailbox","Change DNS"], a:1, why:"Message trace shows whether the email was received, delivered, filtered or failed."}
+ ]}
+]},
+{id:"lnx", tag:"$_", title:"Linux for Windows Admins", sub:"Servers you'll meet sooner or later", lessons:[
+ {title:"Getting around", sub:"Your first terminal commands", cards:[
+  {t:"Windows → Linux translation", body:`<div class="term">pwd        where am I?            (cd with no args on Windows)
+ls -l      list files             (dir)
+cd /var    change folder          (cd)
+cat file   print a file           (type)
+less file  read a long file page by page
+man ls     manual for a command   (Get-Help)
+sudo cmd   run as administrator (root)</div><p>Linux paths use forward slashes and start at <code>/</code>. Names are **case-sensitive**: <code>Log.txt</code> and <code>log.txt</code> are different files.</p>`},
+  {fill:"Which command shows the folder you're currently in?", ans:["pwd"], ph:"type here…", why:"pwd means 'print working directory'."},
+  {mc:"What does `sudo` do?", o:["Deletes a file","Runs the command with administrator (root) rights","Shows the manual","Switches folders"], a:1, why:"sudo runs one command as root, like 'Run as administrator' on Windows."},
+  {mc:"Which Linux command is closest to `dir` on Windows?", o:["cat","ls","pwd","man"], a:1, why:"ls lists the files in a folder. ls -l adds sizes and dates."}
+ ]},
+ {title:"Services & logs", sub:"systemctl and journalctl", cards:[
+  {t:"Managing services", body:`<p>Most Linux servers use **systemd** to run services.</p><div class="term"><span class="p">$</span> systemctl status nginx
+<span class="p">$</span> sudo systemctl restart nginx
+<span class="p">$</span> sudo systemctl enable nginx      # start at boot
+<span class="p">$</span> journalctl -u nginx --since "1 hour ago"
+<span class="p">$</span> tail -f /var/log/syslog</div><ul><li><code>systemctl</code> starts, stops and checks services, like services.msc.</li><li><code>journalctl -u name</code> shows that service's logs, like Event Viewer.</li><li><code>tail -f</code> follows a log file live as new lines appear.</li></ul>`},
+  {order:"Build the command that restarts the nginx service.", tokens:["sudo","systemctl","restart","nginx","journalctl","status"], ans:["sudo","systemctl","restart","nginx"], why:"Restarting needs root, so sudo comes first, then systemctl restart and the service name."},
+  {mc:"You want to watch a log file update live. Which command?", o:["cat","tail -f","pwd","ls -l"], a:1, why:"tail -f keeps the file open and prints new lines as they're written. Ctrl+C stops it."},
+  {mc:"What does `journalctl -u nginx` show?", o:["Disk space","Logs for the nginx service","Users signed in","Network settings"], a:1, why:"-u filters the system journal to one service unit."}
+ ]},
+ {title:"Disk & processes", sub:"Find what's full or stuck", cards:[
+  {t:"Space and processes", body:`<div class="term"><span class="p">$</span> df -h              # free space on each disk
+<span class="p">$</span> du -sh *           # size of each item in this folder
+<span class="p">$</span> top                # live CPU and memory use (q to quit)
+<span class="p">$</span> ps aux | grep java # find running java processes
+<span class="p">$</span> kill 4213          # stop process ID 4213</div><p><code>-h</code> means "human readable": sizes in G and M instead of bytes.</p><p><code>grep</code> filters lines that contain a word, like <code>Where-Object</code> or <code>findstr</code>.</p>`},
+  {mc:"A server says 'No space left on device'. Which command shows free space per disk?", o:["du -sh *","df -h","top","ls"], a:1, why:"df -h shows each filesystem's size, used and available space."},
+  {order:"Build the command that lists running processes and keeps only lines with 'java'.", tokens:["ps","aux","|","grep","java","kill"], ans:["ps","aux","|","grep","java"], why:"ps aux lists every process, and grep java keeps the matching lines."},
+  {mc:"The disk is full. How do you find which folder is using the most space?", o:["df -h","du -sh * inside the folder","pwd","systemctl status"], a:1, why:"du -sh * shows the size of each item, so you can drill down to the big one."}
+ ]}
+]}
+];
+
+/* ---------- Cheat sheet ---------- */
+const SHEET = [
+ ["PowerShell", [["function Verb-Noun { param(...) }","Reusable tool"],["Import-Csv file.csv | ForEach-Object { $_.Column }","Loop over CSV rows"],["Export-Csv out.csv -NoTypeInformation","Save results"],["-ErrorAction Stop","Make errors catchable"],["Invoke-Command -ComputerName A,B -ScriptBlock {...}","Run on many PCs"],["Enter-PSSession PC01","Remote prompt"],["-WhatIf","Preview without changing"]]],
+ ["Networking", [["/24 = 254 · /25 = 126 · /26 = 62 · /27 = 30","Usable hosts"],["2^(32 − prefix) − 2","Usable hosts formula"],["Access port / Trunk port","One VLAN / many tagged VLANs"],["ip helper-address","DHCP relay across VLANs"],["A · CNAME · MX · PTR · SRV","Name→IP · alias · mail · reverse · service"]]],
+ ["Active Directory", [["Local → Site → Domain → OU","GPO order, last wins"],["gpresult /r  ·  gpresult /h report.html","Applied GPOs"],["repadmin /replsummary","Replication health"],["repadmin /syncall /AdeP","Force replication"],["netdom query fsmo","FSMO role holders"]]],
+ ["Servers & storage", [["RAID 0 / 1 / 5 / 10","None / mirror / parity / mirror+stripe"],["RAID 5 space = (disks − 1) × size","Usable capacity"],["3-2-1","3 copies, 2 media, 1 offsite"],["RPO / RTO","Data you can lose / time you can be down"]]],
+ ["Cloud", [["Start-ADSyncSyncCycle -PolicyType Delta","Force Entra Connect sync"],["Connect-ExchangeOnline","Start Exchange session"],["Add-MailboxPermission -Identity box -User u -AccessRights FullAccess","Mailbox access"],["Set-Mailbox -Identity u -Type Shared","Convert to shared"]]],
+ ["Linux", [["pwd · ls -l · cd · cat · less · man","Getting around"],["sudo systemctl restart <svc>","Restart a service"],["journalctl -u <svc>","Service logs"],["tail -f <file>","Follow a log"],["df -h · du -sh *","Disk free · folder sizes"],["ps aux | grep <name>","Find a process"]]]
+];
+
+/* ---------- State ---------- */
+const KEY = "sap-progress-v1";
+let S = {xp:0, streak:0, lastDay:"", day:"", dayXp:0, done:{}};
+try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch(e) {}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+const today = () => new Date().toLocaleDateString("en-CA");
+const yesterday = () => { const d = new Date(); d.setDate(d.getDate()-1); return d.toLocaleDateString("en-CA"); };
+if (S.day !== today()) { S.day = today(); S.dayXp = 0; }
+if (S.lastDay && S.lastDay !== today() && S.lastDay !== yesterday()) S.streak = 0;
+
+const $ = id => document.getElementById(id);
+const md = s => s.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>");
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const norm = s => s.trim().toLowerCase().replace(/\s+/g," ");
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+/* ---------- Home ---------- */
+function renderStats(){
+  $("sStreak").textContent = S.streak; $("sXp").textContent = S.xp;
+  $("gNow").textContent = Math.min(S.dayXp,30); $("gBar").style.width = Math.min(100, S.dayXp/30*100) + "%";
+}
+let openCourse = null;
+try { openCourse = localStorage.getItem("sap-open"); } catch(e) {}
+function renderHome(){
+  renderStats();
+  $("viewLearn").innerHTML = COURSES.map(c => {
+    const doneCount = c.lessons.filter((_,i)=>S.done[c.id+i]).length;
+    const isOpen = openCourse === c.id || (openCourse === null && c.id === "psp");
+    const nodes = c.lessons.map((l,i)=>{
+      const done = !!S.done[c.id+i];
+      const locked = i>0 && !S.done[c.id+(i-1)] && !done;
+      const label = done ? "✓" : (i+1);
+      return `<button class="node ${done?"done":""} ${locked?"locked":""}" data-c="${c.id}" data-l="${i}" ${locked?'aria-disabled="true"':""}>
+        <span class="dot">${label}</span>
+        <span><span class="node-name">${l.title}</span><br><span class="node-sub">${locked?"Finish the lesson above to unlock":l.sub}</span></span></button>`;
+    }).join("");
+    return `<article class="course">
+      <button class="course-head" data-toggle="${c.id}" aria-expanded="${isOpen}">
+        <span class="tag">${c.tag}</span>
+        <span class="course-body"><span class="course-title">${c.title}</span><br><span class="course-sub">${c.sub}</span></span>
+        <span class="course-meta">${doneCount}/${c.lessons.length}</span>
+      </button>
+      <div class="path" ${isOpen?"":"hidden"}>${nodes}</div>
+    </article>`;
+  }).join("");
+}
+$("viewLearn").addEventListener("click", e => {
+  const t = e.target.closest("[data-toggle]");
+  if (t){ openCourse = openCourse === t.dataset.toggle ? "" : t.dataset.toggle; try{localStorage.setItem("sap-open",openCourse);}catch(err){} renderHome(); return; }
+  const n = e.target.closest(".node");
+  if (n && !n.classList.contains("locked")) startLesson(n.dataset.c, +n.dataset.l);
+});
+$("viewSheet").innerHTML = SHEET.map(([h,rows]) => `<section><h3>${h}</h3>${rows.map(([c,d])=>`<div class="cmd"><code>${esc(c)}</code><span>${d}</span></div>`).join("")}</section>`).join("") + `<p class="note">Everything here is taught in the lessons.</p>`;
+function tab(which){
+  $("tabLearn").setAttribute("aria-selected", which==="learn"); $("tabSheet").setAttribute("aria-selected", which==="sheet");
+  $("viewLearn").hidden = which!=="learn"; $("viewSheet").hidden = which!=="sheet";
+}
+$("tabLearn").onclick = () => tab("learn"); $("tabSheet").onclick = () => tab("sheet");
+
+/* ---------- Lesson player ---------- */
+let L = null;
+function startLesson(cid, li){
+  const course = COURSES.find(c=>c.id===cid);
+  const lesson = course.lessons[li];
+  L = {cid, li, course, lesson, queue: lesson.cards.slice(), idx:0, total: lesson.cards.length, correct:0, wrong:0, firstTry:new Set(), state:"show", pick:null, built:[]};
+  $("lesson").hidden = false; $("home").setAttribute("aria-hidden","true");
+  showCard();
+}
+function setFoot(mode, title, text, label, enabled){
+  const f = $("lFoot"); f.className = "l-foot" + (mode ? " " + mode : "");
+  $("fb").hidden = !title; $("fbTitle").textContent = title || ""; $("fbText").innerHTML = text || "";
+  $("go").textContent = label; $("go").disabled = !enabled;
+}
+function progress(){ $("lBar").style.width = Math.min(100, L.idx / L.queue.length * 100) + "%"; }
+function showCard(){
+  progress();
+  const c = L.queue[L.idx]; L.state = "show"; L.pick = null; L.built = [];
+  const m = $("lMain"); m.scrollTop = 0;
+  const kick = `<div class="kicker">${L.course.title} · ${L.lesson.title}</div>`;
+  if (c.t){
+    m.innerHTML = `${kick}<h2>${c.t}</h2><div class="teach">${md(c.body)}${c.tip?`<div class="tip"><b>Tip:</b> ${md(c.tip)}</div>`:""}</div>`;
+    setFoot("", "", "", "Continue", true); L.state = "teach"; return;
+  }
+  if (c.mc){
+    const order = c._order || (c._order = shuffle(c.o.map((_,i)=>i)));
+    m.innerHTML = `${kick}<h2>Quick check</h2><p class="q">${md(esc(c.mc))}</p><div class="opts">${order.map(i=>`<button class="opt" data-i="${i}" aria-pressed="false">${esc(c.o[i])}</button>`).join("")}</div>`;
+    m.querySelectorAll(".opt").forEach(b => b.onclick = () => {
+      if (L.state!=="show") return;
+      m.querySelectorAll(".opt").forEach(x=>x.setAttribute("aria-pressed","false"));
+      b.setAttribute("aria-pressed","true"); L.pick = +b.dataset.i; setFoot("", "", "", "Check", true);
+    });
+    setFoot("", "", "", "Check", false); return;
+  }
+  if (c.fill){
+    m.innerHTML = `${kick}<h2>Type the answer</h2><p class="q">${md(esc(c.fill))}</p><input class="fill" id="fillIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${c.ph||""}"><p class="hint">Not case-sensitive.</p>`;
+    const inp = $("fillIn"); inp.focus();
+    inp.oninput = () => setFoot("", "", "", "Check", inp.value.trim().length>0);
+    inp.onkeydown = e => { if (e.key==="Enter" && inp.value.trim()) $("go").click(); };
+    setFoot("", "", "", "Check", false); return;
+  }
+  if (c.order){
+    const pool = c._pool || (c._pool = shuffle(c.tokens.map((t,i)=>({t,i}))));
+    m.innerHTML = `${kick}<h2>Build it</h2><p class="q">${md(esc(c.order))}</p><div class="build" id="build" aria-label="Your answer"></div><div class="pool" id="pool">${pool.map(p=>`<button class="tok" data-i="${p.i}">${esc(p.t)}</button>`).join("")}</div><p class="hint">Tap pieces to add them. Tap a piece in your answer to remove it.</p>`;
+    const draw = () => {
+      $("build").innerHTML = L.built.map((i,k)=>`<button class="tok" data-k="${k}">${esc(c.tokens[i])}</button>`).join("");
+      $("pool").querySelectorAll(".tok").forEach(b=>b.classList.toggle("used", L.built.includes(+b.dataset.i)));
+      setFoot("", "", "", "Check", L.built.length>0);
+    };
+    $("pool").onclick = e => { const b=e.target.closest(".tok"); if(!b||L.state!=="show"||b.classList.contains("used")) return; L.built.push(+b.dataset.i); draw(); };
+    $("build").onclick = e => { const b=e.target.closest(".tok"); if(!b||L.state!=="show") return; L.built.splice(+b.dataset.k,1); draw(); };
+    draw(); setFoot("", "", "", "Check", false); return;
+  }
+}
+function check(){
+  const c = L.queue[L.idx]; let ok = false, answer = "";
+  if (c.mc){
+    ok = L.pick === c.a; answer = c.o[c.a];
+    $("lMain").querySelectorAll(".opt").forEach(b=>{ const i=+b.dataset.i; if(i===c.a) b.classList.add("right"); else if(i===L.pick) b.classList.add("wrong"); });
+  } else if (c.fill){
+    const v = norm($("fillIn").value); ok = c.ans.some(a=>norm(a)===v); answer = c.ans[0]; $("fillIn").disabled = true;
+  } else if (c.order){
+    ok = L.built.map(i=>c.tokens[i]).join(" ") === c.ans.join(" "); answer = c.ans.join(" ");
+  }
+  L.state = "checked";
+  if (ok){
+    L.correct++; if (!c._missed) L.firstTry.add(c);
+    setFoot("good", "Correct!", esc(c.why), "Continue", true);
+  } else {
+    L.wrong++; c._missed = true; L.queue.push(c);
+    setFoot("bad", "Not quite", `Answer: <code>${esc(answer)}</code><br>${esc(c.why)}<br><i>You'll see this one again at the end.</i>`, "Got it", true);
+  }
+}
+$("go").onclick = () => {
+  if (!L) return;
+  if (L.state === "show") return check();
+  if (L.state === "finished"){ closeLesson(); return; }
+  L.idx++;
+  if (L.idx >= L.queue.length) return finish();
+  showCard();
+};
+function finish(){
+  const qs = L.lesson.cards.filter(c=>!c.t).length;
+  const perfect = L.wrong === 0;
+  const gained = 10 + L.firstTry.size * 2 + (perfect ? 5 : 0);
+  const first = !S.done[L.cid+L.li];
+  S.xp += gained; S.dayXp += gained; S.done[L.cid+L.li] = true;
+  if (S.lastDay !== today()){ S.streak = (S.lastDay === yesterday()) ? S.streak+1 : 1; S.lastDay = today(); }
+  save(); renderHome();
+  $("lBar").style.width = "100%";
+  const next = L.course.lessons[L.li+1];
+  $("lMain").innerHTML = `<div class="done-screen"><div class="kicker">Lesson complete</div><div class="big">+${gained} XP</div><h2>${perfect ? "Perfect run!" : "Nice work, you fixed your mistakes."}</h2>
+    <div class="done-grid"><div><b>${L.firstTry.size}/${qs}</b><span>right first try</span></div><div><b>${S.streak}</b><span>day streak</span></div><div><b>${S.xp}</b><span>total XP</span></div></div>
+    <p>${next ? `Next up: <b>${next.title}</b>${first?" is now unlocked.":"."}` : `You finished <b>${L.course.title}</b>. Pick another course or replay any lesson for practice.`}</p></div>`;
+  L.state = "finished"; setFoot("", "", "", "Back to courses", true);
+}
+function closeLesson(){
+  L && L.lesson.cards.forEach(c=>{ delete c._missed; delete c._order; delete c._pool; });
+  L = null; $("lesson").hidden = true; $("home").removeAttribute("aria-hidden"); renderHome();
+}
+$("quit").onclick = closeLesson;
+window.hdaBack = () => { if (!$("lesson").hidden) { closeLesson(); return true; } return false; };
+renderHome();
+</script>
+</body></html>
