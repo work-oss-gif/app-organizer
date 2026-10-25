@@ -1,0 +1,493 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>Help Desk Academy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a single phone-width column; home is a vertical lesson path per course, lessons open as a full-screen card flow. */
+:root{
+  --bg:#EEF1F6; --surface:#FFFFFF; --ink:#18233A; --muted:#5B6780; --line:#D5DBE6;
+  --accent:#2F5BEA; --accent-ink:#FFFFFF; --accent-soft:#E3E9FD;
+  --amber:#D98A1C; --good:#1A8F61; --good-bg:#DDF3EA; --bad:#C93B33; --bad-bg:#FBE3E1;
+  --code-bg:#E9EDF5;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0F1524; --surface:#172036; --ink:#E7ECF5; --muted:#93A0BA; --line:#2A3550;
+  --accent:#7393FF; --accent-ink:#0B1020; --accent-soft:#1E2B4F;
+  --amber:#F5B456; --good:#3CC48D; --good-bg:#123026; --bad:#FF746B; --bad-bg:#3A1C1E;
+  --code-bg:#0F1830; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F1524; --surface:#172036; --ink:#E7ECF5; --muted:#93A0BA; --line:#2A3550;
+  --accent:#7393FF; --accent-ink:#0B1020; --accent-soft:#1E2B4F;
+  --amber:#F5B456; --good:#3CC48D; --good-bg:#123026; --bad:#FF746B; --bad-bg:#3A1C1E;
+  --code-bg:#0F1830; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--code-bg);padding:.1em .4em;border-radius:5px;white-space:nowrap}
+.wrap{max-width:560px;margin:0 auto;padding-block:18px 60px}
+
+/* Top bar */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:800;font-size:1.35rem;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand .prompt{font-family:var(--f-mono);font-size:.8rem;background:var(--ink);color:var(--bg);padding:3px 7px;border-radius:6px}
+.stats{display:flex;gap:8px}
+.stat{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat svg{width:16px;height:16px}
+.stat.streak{color:var(--amber)} .stat.xp{color:var(--accent)}
+
+.goal{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:8px}
+.goal-row{display:flex;justify-content:space-between;font-size:.92rem;color:var(--muted)}
+.goal-row b{color:var(--ink)}
+.bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--amber);border-radius:99px;transition:width .4s}
+
+.tabs{display:flex;gap:6px;margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
+.tabs button{flex:1;border:0;background:none;padding:8px;border-radius:9px;font-weight:600;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+
+/* Course list */
+.courses{display:grid;gap:14px;margin-top:18px}
+.course{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.course-head{display:flex;gap:12px;align-items:center;width:100%;border:0;background:none;padding:14px 16px;text-align:left}
+.tag{font-family:var(--f-mono);font-weight:700;font-size:.78rem;min-width:52px;height:44px;display:grid;place-items:center;border-radius:10px;background:var(--accent-soft);color:var(--accent);padding:0 6px}
+.course-title{font-family:var(--f-display);font-weight:600;font-size:1.12rem;line-height:1.2}
+.course-sub{font-size:.85rem;color:var(--muted)}
+.course-meta{margin-left:auto;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.course-body{min-width:0;flex:1}
+.path{display:grid;gap:4px;padding:6px 16px 18px}
+.node{display:flex;align-items:center;gap:14px;border:0;background:none;padding:6px 0;text-align:left;width:100%}
+.node:nth-child(2){padding-left:34px} .node:nth-child(3){padding-left:68px}
+.dot{flex:none;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-family:var(--f-display);font-size:1.1rem;
+  background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 0 color-mix(in srgb, var(--accent) 60%, #000)}
+.node.done .dot{background:var(--good);box-shadow:0 4px 0 color-mix(in srgb, var(--good) 60%, #000);color:var(--surface)}
+.node.locked{cursor:not-allowed}
+.node.locked .dot{background:var(--line);color:var(--muted);box-shadow:0 4px 0 color-mix(in srgb, var(--line) 70%, #000)}
+.node-name{font-weight:600}
+.node-sub{font-size:.82rem;color:var(--muted)}
+.node:not(.locked):hover .dot{transform:translateY(-2px)}
+
+/* Cheat sheet */
+.sheet{display:grid;gap:14px;margin-top:18px}
+.sheet section{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.sheet h3{margin:0 0 8px;font-family:var(--f-display);font-weight:600;font-size:1.05rem}
+.cmd{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;padding:8px 0;border-top:1px solid var(--line)}
+.cmd:first-of-type{border-top:0}
+.cmd code{white-space:normal;word-break:break-word;justify-self:start}
+.cmd span{font-size:.88rem;color:var(--muted)}
+.note{font-size:.88rem;color:var(--muted);margin-top:14px}
+
+/* Lesson overlay */
+.lesson{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top,0px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px))}
+.l-top{max-width:560px;width:100%;margin:0 auto;display:flex;align-items:center;gap:12px;padding-block:14px}
+.x{border:0;background:none;width:36px;height:36px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.x svg{width:22px;height:22px}
+.l-top .bar{flex:1;height:12px}
+.l-top .bar>i{background:var(--good)}
+.l-main{flex:1;overflow-y:auto;max-width:560px;width:100%;margin:0 auto;padding-block:8px 24px}
+.kicker{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.l-main h2{font-family:var(--f-display);font-weight:800;font-size:1.6rem;line-height:1.15;margin:6px 0 14px;text-wrap:balance}
+.teach p{margin:0 0 12px;max-width:65ch}
+.teach ul{margin:0 0 12px;padding-left:20px}
+.teach li{margin-bottom:6px}
+.term{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-family:var(--f-mono);font-size:.86rem;overflow-x:auto;white-space:pre;margin:4px 0 14px}
+.term .p{color:var(--accent)}
+.tip{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:.94rem;margin-top:6px}
+.tip b{color:var(--accent)}
+.q{font-size:1.12rem;font-weight:600;margin:0 0 16px;max-width:65ch}
+.opts{display:grid;gap:10px}
+.opt{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;text-align:left;font-weight:500;box-shadow:0 3px 0 var(--line)}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.opt.right{border-color:var(--good);background:var(--good-bg)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-bg)}
+.fill{width:100%;font-family:var(--f-mono);font-size:1rem;padding:14px;border-radius:12px;border:2px solid var(--line);background:var(--surface);color:var(--ink)}
+.fill:focus{border-color:var(--accent);outline:none}
+.build{min-height:58px;border-bottom:2px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;margin-bottom:16px;align-content:flex-start}
+.pool{display:flex;flex-wrap:wrap;gap:8px}
+.tok{font-family:var(--f-mono);font-size:.9rem;border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;box-shadow:0 3px 0 var(--line)}
+.tok.used{visibility:hidden}
+.hint{font-size:.85rem;color:var(--muted);margin-top:10px}
+
+.l-foot{border-top:1px solid var(--line);background:var(--surface);padding:14px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px, env(safe-area-inset-left, 0px));
+  margin:0 calc(-1 * max(16px, env(safe-area-inset-right, 0px))) 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px)))}
+.l-foot.good{background:var(--good-bg)} .l-foot.bad{background:var(--bad-bg)}
+.foot-in{max-width:560px;margin:0 auto;display:grid;gap:10px}
+.fb-title{font-family:var(--f-display);font-weight:800;font-size:1.2rem}
+.l-foot.good .fb-title{color:var(--good)} .l-foot.bad .fb-title{color:var(--bad)}
+.fb-text{font-size:.95rem}
+.go{border:0;border-radius:12px;padding:14px;font-weight:700;font-size:1rem;background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 0 color-mix(in srgb, var(--accent) 55%, #000)}
+.go:disabled{background:var(--line);color:var(--muted);box-shadow:none;cursor:default}
+.l-foot.good .go{background:var(--good);color:var(--surface);box-shadow:0 4px 0 color-mix(in srgb, var(--good) 55%, #000)}
+.l-foot.bad .go{background:var(--bad);color:var(--surface);box-shadow:0 4px 0 color-mix(in srgb, var(--bad) 55%, #000)}
+
+.done-screen{text-align:center;padding-top:30px}
+.done-screen .big{font-family:var(--f-display);font-weight:800;font-size:3.2rem;color:var(--amber);line-height:1}
+.done-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0}
+.done-grid div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 6px}
+.done-grid b{display:block;font-family:var(--f-display);font-size:1.4rem;font-variant-numeric:tabular-nums}
+.done-grid span{font-size:.8rem;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap" id="home">
+  <header class="top">
+    <div class="brand"><span class="prompt">C:\&gt;_</span> Help Desk Academy</div>
+    <div class="stats">
+      <div class="stat streak" title="Day streak"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 4 5 5.5 5 10.5A5 5 0 0 1 7 13c0-2 1-3.5 2-4.5.3 2 1.3 3 2.3 3C11 9 10 6 12 2z"/></svg><span id="sStreak">0</span></div>
+      <div class="stat xp" title="Total XP"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span id="sXp">0</span></div>
+    </div>
+  </header>
+  <div class="goal">
+    <div class="goal-row"><span>Daily goal</span><span><b id="gNow">0</b> / 30 XP</span></div>
+    <div class="bar"><i id="gBar" style="width:0%"></i></div>
+  </div>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabLearn" aria-selected="true">Learn</button>
+    <button role="tab" id="tabSheet" aria-selected="false">Cheat sheet</button>
+  </div>
+  <div id="viewLearn" class="courses"></div>
+  <div id="viewSheet" class="sheet" hidden></div>
+</div>
+
+<div class="lesson" id="lesson" hidden>
+  <div class="l-top">
+    <button class="x" id="quit" aria-label="Close lesson"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <div class="bar"><i id="lBar" style="width:0%"></i></div>
+  </div>
+  <div class="l-main" id="lMain"></div>
+  <div class="l-foot" id="lFoot"><div class="foot-in">
+    <div id="fb" hidden><div class="fb-title" id="fbTitle"></div><div class="fb-text" id="fbText"></div></div>
+    <button class="go" id="go">Continue</button>
+  </div></div>
+</div>
+
+<script>
+/* ---------- Content ----------
+ Card types: t (teach), mc (multiple choice), fill (type answer), order (tap to build) */
+const COURSES = [
+{id:"win", tag:"WIN", title:"Windows Essentials", sub:"Tools you use on every ticket", lessons:[
+ {title:"Task Manager", sub:"Find what's slowing a PC down", cards:[
+  {t:"Task Manager", body:`<p>Task Manager shows every program running on the PC and how much **CPU**, **memory** and **disk** it uses.</p><p>Open it straight away with <code>Ctrl + Shift + Esc</code>. You don't need to go through Ctrl+Alt+Del.</p><ul><li>**Processes** tab: sort by CPU or Memory to find the heavy app.</li><li>**End task**: closes a frozen program.</li><li>**Startup apps**: controls what launches when the user signs in.</li></ul>`, tip:"If a PC is slow only right after login, look at Startup apps first. Too many startup programs is the usual cause."},
+  {mc:"What is the fastest shortcut to open Task Manager directly?", o:["Ctrl + Alt + Del","Ctrl + Shift + Esc","Win + R","Alt + F4"], a:1, why:"Ctrl+Shift+Esc opens Task Manager in one step. Ctrl+Alt+Del opens a menu first, so it takes an extra click."},
+  {mc:"A user says their laptop is very slow for the first 5 minutes after signing in, then it's fine. Where do you look first?", o:["Event Viewer","Startup apps in Task Manager","Device Manager","Disk Cleanup"], a:1, why:"Slow only at sign-in points to too many programs starting at once. Disabling unneeded ones in Startup apps fixes it."},
+  {fill:"In the Run box (Win + R), what do you type to open the Services window?", ans:["services.msc"], ph:"type here…", why:"services.msc opens Services, where you can start, stop or restart things like the Print Spooler."}
+ ]},
+ {title:"Event Viewer", sub:"Read the PC's diary", cards:[
+  {t:"Event Viewer", body:`<p>Windows writes down what happens in **logs**. Event Viewer lets you read them. Open it with <code>eventvwr.msc</code>.</p><ul><li>**Windows Logs → System**: hardware, drivers, shutdowns, Windows itself.</li><li>**Windows Logs → Application**: programs like Outlook or Chrome.</li></ul><p>Each entry has a **level** (Error, Warning, Information), a time and an **Event ID** number you can search online.</p>`, tip:"Event ID 41 (Kernel-Power) in the System log means the PC lost power or crashed without shutting down properly."},
+  {mc:"A PC keeps restarting by itself. Which log do you check?", o:["Application","System","Security","Setup"], a:1, why:"Shutdowns, crashes and driver problems are written to the System log."},
+  {mc:"Outlook crashes every time it opens. Which log has the details?", o:["Application","System","Forwarded Events","None, Outlook keeps no logs"], a:0, why:"Program crashes go into the Application log, usually as an Error with the source 'Application Error'."},
+  {fill:"What do you type in the Run box to open Event Viewer?", ans:["eventvwr.msc","eventvwr"], ph:"type here…", why:"eventvwr.msc (or just eventvwr) opens Event Viewer."}
+ ]},
+ {title:"Repair commands", sub:"sfc, gpupdate, shutdown", cards:[
+  {t:"Three commands worth knowing", body:`<p>Run these in a **Command Prompt opened as administrator**.</p><div class="term"><span class="p">C:\\&gt;</span> sfc /scannow
+<span class="p">C:\\&gt;</span> gpupdate /force
+<span class="p">C:\\&gt;</span> shutdown /r /t 0</div><ul><li><code>sfc /scannow</code> checks Windows system files and repairs broken ones.</li><li><code>gpupdate /force</code> applies Group Policy changes now, instead of waiting up to 90 minutes.</li><li><code>shutdown /r /t 0</code> restarts the PC with a 0-second wait.</li></ul>`},
+  {order:"Build the command that scans and repairs Windows system files.", tokens:["sfc","/scannow","/force","chkdsk"], ans:["sfc","/scannow"], why:"sfc means System File Checker, and /scannow tells it to scan right away."},
+  {mc:"You changed a Group Policy for mapped drives. How do you make a user's PC pick it up now?", o:["ipconfig /renew","gpupdate /force","sfc /scannow","Restart the server"], a:1, why:"gpupdate /force re-applies all policies straight away. Some settings, like drive maps, may also need a sign-out."},
+  {mc:"What does `shutdown /r /t 0` do?", o:["Shuts down in 0 minutes","Restarts immediately","Logs the user off","Restarts after 30 seconds"], a:1, why:"/r means restart and /t 0 means wait 0 seconds."}
+ ]}
+]},
+{id:"net", tag:"NET", title:"Networking Basics", sub:"IP, DNS, DHCP and testing", lessons:[
+ {title:"IP addresses", sub:"Read an address like a pro", cards:[
+  {t:"What an IP address tells you", body:`<p>An IPv4 address is four numbers from 0 to 255, like <code>192.168.1.20</code>. It's the device's address on the network.</p><p>**Private** ranges are used inside offices and homes:</p><ul><li><code>10.x.x.x</code></li><li><code>172.16.x.x</code> to <code>172.31.x.x</code></li><li><code>192.168.x.x</code></li></ul><p>If a PC shows <code>169.254.x.x</code>, it **did not get an address** from the network. Windows made one up by itself (this is called APIPA).</p>`, tip:"169.254 = no DHCP. Check the cable, Wi-Fi connection, or switch port before anything else."},
+  {mc:"A user's PC shows the IP address 169.254.12.5. What does this mean?", o:["It's working normally","It couldn't get an address from DHCP","It's using a public IP","DNS is broken"], a:1, why:"169.254.x.x is the address Windows gives itself when no DHCP server answers."},
+  {mc:"Which of these is a private IP address?", o:["8.8.8.8","192.168.1.20","52.10.4.1","1.1.1.1"], a:1, why:"192.168.x.x is a private range. The others are public internet addresses."},
+  {fill:"Which Windows command shows the PC's IP address?", ans:["ipconfig","ipconfig /all"], ph:"type here…", why:"ipconfig shows the IP, subnet mask and gateway. ipconfig /all also shows DNS servers and the MAC address."}
+ ]},
+ {title:"DNS & DHCP", sub:"Names and automatic addresses", cards:[
+  {t:"Two services behind every connection", body:`<p>**DHCP** hands out network settings automatically when a device connects: an IP address, the default gateway and the DNS servers.</p><p>**DNS** turns names into IP addresses. It's like a phone book: you ask for <code>outlook.com</code> and DNS answers with its IP.</p><div class="term"><span class="p">C:\\&gt;</span> ipconfig /release
+<span class="p">C:\\&gt;</span> ipconfig /renew
+<span class="p">C:\\&gt;</span> ipconfig /flushdns</div><p><code>/release</code> and <code>/renew</code> ask DHCP for a fresh address. <code>/flushdns</code> clears saved name lookups.</p>`},
+  {mc:"You can ping 8.8.8.8 but not google.com. What's the likely problem?", o:["The network cable","DNS","DHCP","The monitor"], a:1, why:"Reaching an IP but not a name means the connection works, but name lookup (DNS) is failing."},
+  {order:"Build the command that clears the PC's saved DNS lookups.", tokens:["ipconfig","/flushdns","/renew","ping"], ans:["ipconfig","/flushdns"], why:"ipconfig /flushdns empties the DNS cache, so the PC looks names up fresh."},
+  {mc:"What is DHCP's job?", o:["Turn names into IPs","Automatically give devices IP settings","Block websites","Store user passwords"], a:1, why:"DHCP automatically hands out IP address, gateway and DNS settings."}
+ ]},
+ {title:"Testing a connection", sub:"ping, tracert, nslookup", cards:[
+  {t:"Your three test tools", body:`<ul><li><code>ping 10.0.0.1</code>: is that device answering?</li><li><code>tracert google.com</code>: shows every hop (router) on the way, so you can see where it stops.</li><li><code>nslookup intranet</code>: asks DNS what IP a name has.</li></ul><p>The **default gateway** is the router that connects the local network to everything else. Test from close to far:</p><div class="term">1. ping the gateway       → local network OK?
+2. ping 8.8.8.8           → internet OK?
+3. ping google.com        → DNS OK?</div>`},
+  {mc:"Which command shows each router hop between you and a website?", o:["ping","tracert","nslookup","netstat"], a:1, why:"tracert lists each hop and its response time, so you can spot where traffic stops."},
+  {fill:"Which command asks DNS for the IP address of a name?", ans:["nslookup"], ph:"type here…", why:"nslookup queries DNS directly, which helps confirm whether name lookup is the problem."},
+  {mc:"A user has no internet. What should you ping first?", o:["google.com","The default gateway","A server in another country","Your own phone"], a:1, why:"Start close. If the gateway doesn't answer, the issue is on the local network, so there's no point testing further away yet."}
+ ]}
+]},
+{id:"ad", tag:"AD", title:"Active Directory", sub:"Users, groups and accounts", lessons:[
+ {title:"Users, groups, OUs", sub:"How AD is organised", cards:[
+  {t:"The building blocks", body:`<p>**Active Directory (AD)** is the company's list of user accounts, computers and groups. Everyone signs in with an account stored here.</p><ul><li>**User**: one person's account.</li><li>**Group**: a collection of users. Give access to the group, not to each person.</li><li>**OU (Organizational Unit)**: a folder that organises objects, for example by department, and lets you apply Group Policy to them.</li></ul><p>You manage it in **Active Directory Users and Computers**: <code>dsa.msc</code>.</p>`, tip:"Rule of thumb: permissions go to groups, people go into groups."},
+  {mc:"30 people in Finance need access to a shared folder. What's the best way?", o:["Add each person to the folder","Put them in a Finance group and give the group access","Share one login","Make them all admins"], a:1, why:"Groups make access easy to manage. When someone joins or leaves, you only change the group membership."},
+  {mc:"What is an OU mainly used for?", o:["Storing files","Organising objects and applying Group Policy","Sending email","Holding passwords"], a:1, why:"OUs are containers for organising users and computers, and Group Policies are linked to them."},
+  {fill:"What do you type in Run to open Active Directory Users and Computers?", ans:["dsa.msc"], ph:"type here…", why:"dsa.msc opens Active Directory Users and Computers (ADUC)."}
+ ]},
+ {title:"Lockouts & resets", sub:"The most common ticket", cards:[
+  {t:"Locked, disabled, or forgotten?", body:`<ul><li>**Locked out**: too many wrong passwords. AD locks the account automatically. Fix: Properties → Account tab → tick **Unlock account**.</li><li>**Disabled**: an admin turned it off on purpose, for example for a leaver.</li><li>**Forgot password**: right-click the user → **Reset Password**, and tick **User must change password at next logon**.</li></ul>`, tip:"If someone keeps getting locked out, an old password is usually saved somewhere: their phone's email app, a mapped drive, or a second PC still signed in."},
+  {mc:"A user gets locked out again every hour, even after you unlock them. Most likely cause?", o:["Their keyboard is broken","An old password saved on their phone or another device","AD is down","Their monitor settings"], a:1, why:"A device that keeps trying an old saved password causes repeated lockouts. Update or remove it there."},
+  {mc:"After resetting a user's password, which box should you tick?", o:["Password never expires","User must change password at next logon","Account is disabled","Store password using reversible encryption"], a:1, why:"This lets the user pick their own password, so only they know it."},
+  {mc:"What's the difference between locked and disabled?", o:["They're the same","Locked happens automatically after wrong passwords; disabled is set by an admin","Disabled happens automatically; locked is set by an admin","Locked deletes the account"], a:1, why:"Lockout is automatic and temporary. Disabled is a deliberate choice by IT."}
+ ]},
+ {title:"Joiners & leavers", sub:"Onboarding and offboarding", cards:[
+  {t:"Starting and leaving", body:`<p>**New starter (joiner):**</p><ul><li>Create the account, ideally by **copying** a colleague in the same role. This copies their group memberships.</li><li>Add a Microsoft 365 license so they get a mailbox.</li></ul><p>**Leaver:**</p><ul><li>**Disable** the account first. Don't delete it straight away.</li><li>Remove group memberships and move it to a "Disabled Users" OU.</li><li>Convert their mailbox to a shared mailbox if the manager needs it.</li></ul>`, tip:"Disabling keeps their files, mailbox and history, and can be undone in one click if HR made a mistake."},
+  {mc:"An employee leaves today. What's your first step?", o:["Delete the account","Disable the account","Change their name","Do nothing until next month"], a:1, why:"Disabling stops access immediately but keeps everything in case it's needed."},
+  {mc:"Why not delete a leaver's account right away?", o:["Deleting is not possible","You may need their data, mailbox or history, and deleting can't easily be undone","It costs money to delete","AD doesn't allow it"], a:1, why:"Managers often need files or email afterwards. Most companies delete only after a set period."},
+  {mc:"Quickest way to give a new hire the same groups as their teammate?", o:["Add groups one by one from memory","Right-click the teammate's account → Copy…","Ask the user to request each group","Make them a Domain Admin"], a:1, why:"Copy creates a new user with the same group memberships and settings, which saves time and avoids missed access."}
+ ]}
+]},
+{id:"ps", tag:"PS>", title:"PowerShell for Admins", sub:"Automate the boring tasks", lessons:[
+ {title:"Cmdlets", sub:"Verb-Noun commands", cards:[
+  {t:"How PowerShell commands are named", body:`<p>PowerShell commands are called **cmdlets** and follow a **Verb-Noun** pattern, so you can often guess them:</p><div class="term"><span class="p">PS&gt;</span> Get-Service
+<span class="p">PS&gt;</span> Get-Process
+<span class="p">PS&gt;</span> Restart-Service -Name Spooler</div><p>Words starting with <code>-</code> are **parameters**, extra details for the command.</p><p>Stuck? <code>Get-Help Get-Service</code> explains a command. <code>Get-Command *user*</code> finds commands with "user" in the name. Press **Tab** to auto-complete.</p>`},
+  {mc:"Which one follows PowerShell's naming pattern?", o:["ServiceGet","Get-Service","get_service","service.get"], a:1, why:"Cmdlets are Verb-Noun with a dash: Get-Service."},
+  {fill:"Which cmdlet shows the help page for another command?", ans:["get-help"], ph:"type here…", why:"Get-Help shows what a command does and its parameters. Add -Examples to see examples."},
+  {order:"Build the command that shows the Print Spooler service.", tokens:["Get-Service","-Name","Spooler","Stop-Service"], ans:["Get-Service","-Name","Spooler"], why:"Get-Service with -Name Spooler shows just that service and whether it's running."}
+ ]},
+ {title:"The pipeline", sub:"Chain commands with |", cards:[
+  {t:"Passing results along", body:`<p>The pipe <code>|</code> sends the results of one command into the next.</p><div class="term"><span class="p">PS&gt;</span> Get-Service | Where-Object Status -eq 'Running'
+<span class="p">PS&gt;</span> Get-Process | Sort-Object CPU -Descending
+<span class="p">PS&gt;</span> Get-Process | Select-Object Name, CPU</div><ul><li><code>Where-Object</code> filters (keeps only matching items).</li><li><code>Sort-Object</code> sorts.</li><li><code>Select-Object</code> picks which columns to show.</li></ul><p>Inside a script block, <code>$_</code> means "the current item coming through the pipe".</p>`},
+  {order:"Build: list processes with the highest CPU first.", tokens:["Get-Process","|","Sort-Object","CPU","-Descending","Where-Object"], ans:["Get-Process","|","Sort-Object","CPU","-Descending"], why:"Get-Process lists processes, the pipe passes them to Sort-Object, and -Descending puts the biggest at the top."},
+  {mc:"In `Where-Object { $_.Status -eq 'Stopped' }`, what is `$_`?", o:["A variable you must create first","The current item coming through the pipeline","The last error","The computer's name"], a:1, why:"$_ stands for each item one at a time as it passes through the pipe."},
+  {mc:"What does `Get-Service | Where-Object Status -eq 'Running'` show?", o:["All services","Only running services","Only stopped services","It starts all services"], a:1, why:"Where-Object keeps only services whose Status equals Running. It doesn't change anything."}
+ ]},
+ {title:"AD with PowerShell", sub:"Manage accounts in bulk", cards:[
+  {t:"Account tasks in one line", body:`<p>Load the module once: <code>Import-Module ActiveDirectory</code></p><div class="term"><span class="p">PS&gt;</span> Get-ADUser jsmith -Properties *
+<span class="p">PS&gt;</span> Unlock-ADAccount -Identity jsmith
+<span class="p">PS&gt;</span> Disable-ADAccount -Identity jsmith
+<span class="p">PS&gt;</span> Add-ADGroupMember -Identity "Sales" -Members jsmith
+<span class="p">PS&gt;</span> Search-ADAccount -LockedOut</div><p>With <code>Add-ADGroupMember</code>, **-Identity is the group** and **-Members is the user**. People mix these up a lot.</p>`, tip:"Test with -WhatIf first, e.g. Disable-ADAccount jsmith -WhatIf. It shows what would happen without doing it."},
+  {order:"Build the command that disables the account jsmith.", tokens:["Disable-ADAccount","-Identity","jsmith","Remove-ADUser","-Members"], ans:["Disable-ADAccount","-Identity","jsmith"], why:"Disable-ADAccount turns the account off but keeps it. Remove-ADUser would delete it."},
+  {mc:"How do you list every locked-out account?", o:["Get-ADUser -Locked","Search-ADAccount -LockedOut","Find-Locked","Get-Lockout -All"], a:1, why:"Search-ADAccount -LockedOut returns all currently locked accounts."},
+  {fill:"Which cmdlet unlocks an AD account?", ans:["unlock-adaccount"], ph:"type here…", why:"Unlock-ADAccount -Identity username does the same as ticking 'Unlock account' in ADUC."}
+ ]}
+]},
+{id:"m365", tag:"M365", title:"Microsoft 365", sub:"Outlook, licenses, OneDrive, Teams", lessons:[
+ {title:"Licenses & mailboxes", sub:"Why a user has no email", cards:[
+  {t:"No license, no mailbox", body:`<p>In Microsoft 365, a user only gets a mailbox, Teams and OneDrive when they have a **license** that includes those apps. You assign licenses in the **Microsoft 365 admin center** (<code>admin.microsoft.com</code>).</p><p>A **shared mailbox** is an inbox several people use, like <code>support@</code> or <code>orders@</code>. Nobody signs into it directly, and it needs no license up to 50 GB.</p>`},
+  {mc:"A new user can sign in but has no mailbox. What's the most likely fix?", o:["Reinstall Outlook","Assign a license that includes Exchange Online","Reset their password","Restart the server"], a:1, why:"The mailbox is created only after a license with Exchange Online is assigned."},
+  {mc:"The returns team wants one inbox they all read: returns@. What do you create?", o:["A new user with a license","A shared mailbox","A distribution list","A Teams chat"], a:1, why:"A shared mailbox lets several people read and reply from one address, without a license."},
+  {mc:"Where do you assign licenses?", o:["Control Panel","Microsoft 365 admin center","Task Manager","Device Manager"], a:1, why:"Licenses are managed in the Microsoft 365 admin center under Users."}
+ ]},
+ {title:"Fixing Outlook", sub:"Web test, safe mode, profiles", cards:[
+  {t:"Outlook troubleshooting order", body:`<ul><li>**1. Try Outlook on the web** (<code>outlook.office.com</code>). If email works there, the mailbox is fine and the problem is on the PC.</li><li>**2. Safe mode**: <code>outlook.exe /safe</code> starts Outlook without add-ins. If it works now, an add-in is the problem.</li><li>**3. New profile**: Control Panel → Mail → Show Profiles → Add.</li></ul><p>Desktop Outlook keeps a local copy of the mailbox in an **.ost file**. If it's corrupted, a new profile builds a fresh one from the server.</p>`},
+  {mc:"Email works in Outlook on the web but not in desktop Outlook. Where is the problem?", o:["The mailbox on the server","The local PC or Outlook app","The user's license","DNS for the whole company"], a:1, why:"If the web version works, the mailbox and license are fine. Focus on the PC."},
+  {fill:"What do you type in Run to start Outlook without add-ins?", ans:["outlook.exe /safe","outlook /safe"], ph:"type here…", why:"outlook.exe /safe loads Outlook with add-ins turned off."},
+  {mc:"Outlook says the data file (.ost) is damaged. Simplest fix?", o:["Delete the user's mailbox","Create a new Outlook profile so a fresh .ost downloads","Reinstall Windows","Ignore it"], a:1, why:"The .ost is only a local copy. A new profile rebuilds it from the server and nothing is lost."}
+ ]},
+ {title:"OneDrive & Teams", sub:"Sync icons and outages", cards:[
+  {t:"Reading OneDrive's icons", body:`<ul><li>**Cloud icon**: online only. The file downloads when opened.</li><li>**Green tick outline**: downloaded and available offline.</li><li>**Solid green tick**: "Always keep on this device".</li></ul><p>**Known Folder Move** backs up the user's Desktop, Documents and Pictures to OneDrive, so a new laptop gets them back after sign-in.</p><p>If lots of users report Teams or Outlook problems at the same time, check **Health → Service health** in the admin center before fixing PCs one by one.</p>`},
+  {mc:"A file in File Explorer shows a cloud icon. What does it mean?", o:["The file is deleted","It's stored online and downloads when you open it","It's corrupted","It's shared with everyone"], a:1, why:"Cloud icon means online-only. It saves disk space and downloads on demand."},
+  {mc:"Twenty users say Teams won't load. What do you check first?", o:["Reinstall Teams on all 20 PCs","Service health in the Microsoft 365 admin center","Each user's password","Their monitors"], a:1, why:"Many users at once usually means a Microsoft-side issue. Service health tells you in seconds."},
+  {mc:"What does Known Folder Move do?", o:["Moves files to a USB drive","Backs up Desktop, Documents and Pictures to OneDrive","Deletes old files","Shares folders with the team"], a:1, why:"It redirects those folders into OneDrive so they're backed up and follow the user to a new PC."}
+ ]}
+]},
+{id:"tkt", tag:"TKT", title:"Troubleshooting & Tickets", sub:"Work like a senior tech", lessons:[
+ {title:"The method", sub:"Six steps every time", cards:[
+  {t:"A repeatable method", body:`<p>Good techs follow the same steps on every problem:</p><div class="term">1. Identify   → ask questions, reproduce it
+2. Theory     → what's the likely cause?
+3. Test       → check the theory
+4. Fix        → plan and apply the fix
+5. Verify     → confirm it works for the user
+6. Document   → write it in the ticket</div><p>The best first question is almost always: **"When did it last work, and what changed?"**</p>`},
+  {order:"Put the troubleshooting steps in the right order.", tokens:["Identify","Theory","Test","Fix","Verify","Document"], ans:["Identify","Theory","Test","Fix","Verify","Document"], shuffle:true, why:"Identify → Theory → Test → Fix → Verify → Document. Skipping Verify is how tickets get reopened."},
+  {mc:"Which first question usually finds the cause fastest?", o:["Have you tried turning it off and on?","When did it last work, and what changed?","What's your favourite browser?","Can you buy a new PC?"], a:1, why:"Most problems come from a change: an update, a new device, a moved desk. Finding the change finds the cause."},
+  {mc:"You've applied a fix. What next?", o:["Close the ticket right away","Check with the user that it works, then document","Move to the next ticket without notes","Restart the server"], a:1, why:"Verify with the user, then document, so the next tech can learn from it."}
+ ]},
+ {title:"Writing tickets", sub:"Notes the next tech can use", cards:[
+  {t:"What a good ticket has", body:`<ul><li>**Who** is affected and **where**.</li><li>**What** happens, with the **exact error message**.</li><li>**When** it started.</li><li>**What you tried** and the result.</li><li>**Impact**: one person, a team, or the whole site?</li></ul><p>**Priority = impact + urgency.** A whole warehouse that can't print shipping labels is high. One user's wallpaper is low.</p>`},
+  {mc:"Which ticket note is most useful?", o:["Printer broken, fixed.","User can't print.","Warehouse label printer 3 shows 'Offline' since 9am. Restarted printer and cleared queue, now printing. Confirmed with shift lead.","Did stuff, works now."], a:2, why:"It says what, where, when, what was done and that it was confirmed. Anyone can understand it later."},
+  {mc:"Which ticket should get the highest priority?", o:["One user wants a new mouse","The whole packing team can't print shipping labels","Someone wants a different wallpaper","A request for a second monitor next month"], a:1, why:"Many people blocked from core work right now = high impact and high urgency."},
+  {mc:"Why copy the exact error message into the ticket?", o:["It makes the ticket longer","It can be searched and points to the real cause","Managers like it","It's not useful"], a:1, why:"Exact messages and codes can be searched and matched to known fixes."}
+ ]},
+ {title:"Talking to users", sub:"Clear, calm, helpful", cards:[
+  {t:"Communication is half the job", body:`<ul><li>Use plain words. Say "your internet connection" instead of "your DHCP lease".</li><li>Ask before taking control of their screen remotely.</li><li>Set expectations: what you'll do and roughly how long.</li><li>Close the loop: tell them when it's fixed and what caused it.</li></ul>`, tip:"Repeat the problem back in your own words. It shows you listened and catches misunderstandings early."},
+  {mc:"Before connecting to a user's PC remotely, you should…", o:["Just connect, it's faster","Ask them first and tell them what you'll do","Wait until they leave","Turn off their monitor"], a:1, why:"Asking first is respectful and gives them a chance to close private things."},
+  {mc:"Which explanation is best for a non-technical user?", o:["Your DHCP lease expired so APIPA kicked in.","Your PC lost its network connection. I've reconnected it and it's working now.","It's a layer 3 issue.","Ticket closed."], a:1, why:"Plain, short and tells them it's fixed."},
+  {mc:"A fix will take two hours. What do you tell the user?", o:["Nothing","Give an honest time estimate and a workaround if there is one","Say it'll take 5 minutes","Tell them to call someone else"], a:1, why:"Honest timing plus a workaround keeps them working and keeps trust."}
+ ]}
+]}
+];
+
+/* ---------- Cheat sheet (built from what the lessons teach) ---------- */
+const SHEET = [
+ ["Windows", [["Ctrl + Shift + Esc","Open Task Manager"],["services.msc","Services"],["eventvwr.msc","Event Viewer"],["sfc /scannow","Repair system files (admin)"],["gpupdate /force","Apply Group Policy now"],["shutdown /r /t 0","Restart now"]]],
+ ["Network", [["ipconfig /all","Full IP settings"],["ipconfig /release + /renew","Get a fresh DHCP address"],["ipconfig /flushdns","Clear DNS cache"],["ping <host>","Is it answering?"],["tracert <host>","Show each hop"],["nslookup <name>","Look up a name in DNS"],["169.254.x.x","No DHCP address received"]]],
+ ["Active Directory", [["dsa.msc","Active Directory Users and Computers"],["Account tab → Unlock account","Unlock a locked user"],["Right-click → Copy…","New user with same groups"]]],
+ ["PowerShell", [["Get-Help <cmdlet>","Explain a command"],["Get-Command *user*","Find commands"],["| Where-Object","Filter results"],["| Sort-Object CPU -Descending","Sort, biggest first"],["Search-ADAccount -LockedOut","List locked users"],["Unlock-ADAccount -Identity <user>","Unlock a user"],["Disable-ADAccount -Identity <user>","Disable a leaver"],["Add-ADGroupMember -Identity <group> -Members <user>","Add a user to a group"],["-WhatIf","Preview without changing anything"]]],
+ ["Microsoft 365", [["admin.microsoft.com","Licenses, users, service health"],["outlook.office.com","Outlook on the web (test mailbox)"],["outlook.exe /safe","Outlook without add-ins"],["Control Panel → Mail","New Outlook profile"]]]
+];
+
+/* ---------- State ---------- */
+const KEY = "hda-progress-v1";
+let S = {xp:0, streak:0, lastDay:"", day:"", dayXp:0, done:{}};
+try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch(e) {}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+const today = () => new Date().toLocaleDateString("en-CA");
+const yesterday = () => { const d = new Date(); d.setDate(d.getDate()-1); return d.toLocaleDateString("en-CA"); };
+if (S.day !== today()) { S.day = today(); S.dayXp = 0; }
+if (S.lastDay && S.lastDay !== today() && S.lastDay !== yesterday()) S.streak = 0;
+
+const $ = id => document.getElementById(id);
+const md = s => s.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>");
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const norm = s => s.trim().toLowerCase().replace(/\s+/g," ");
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+/* ---------- Home ---------- */
+function renderStats(){
+  $("sStreak").textContent = S.streak; $("sXp").textContent = S.xp;
+  $("gNow").textContent = Math.min(S.dayXp,30); $("gBar").style.width = Math.min(100, S.dayXp/30*100) + "%";
+}
+let openCourse = null;
+try { openCourse = localStorage.getItem("hda-open"); } catch(e) {}
+function renderHome(){
+  renderStats();
+  $("viewLearn").innerHTML = COURSES.map(c => {
+    const doneCount = c.lessons.filter((_,i)=>S.done[c.id+i]).length;
+    const isOpen = openCourse === c.id || (openCourse === null && c.id === "win");
+    const nodes = c.lessons.map((l,i)=>{
+      const done = !!S.done[c.id+i];
+      const locked = i>0 && !S.done[c.id+(i-1)] && !done;
+      const label = done ? "✓" : (i+1);
+      return `<button class="node ${done?"done":""} ${locked?"locked":""}" data-c="${c.id}" data-l="${i}" ${locked?'aria-disabled="true"':""}>
+        <span class="dot">${label}</span>
+        <span><span class="node-name">${l.title}</span><br><span class="node-sub">${locked?"Finish the lesson above to unlock":l.sub}</span></span></button>`;
+    }).join("");
+    return `<article class="course">
+      <button class="course-head" data-toggle="${c.id}" aria-expanded="${isOpen}">
+        <span class="tag">${c.tag}</span>
+        <span class="course-body"><span class="course-title">${c.title}</span><br><span class="course-sub">${c.sub}</span></span>
+        <span class="course-meta">${doneCount}/${c.lessons.length}</span>
+      </button>
+      <div class="path" ${isOpen?"":"hidden"}>${nodes}</div>
+    </article>`;
+  }).join("");
+}
+$("viewLearn").addEventListener("click", e => {
+  const t = e.target.closest("[data-toggle]");
+  if (t){ openCourse = openCourse === t.dataset.toggle ? "" : t.dataset.toggle; try{localStorage.setItem("hda-open",openCourse);}catch(err){} renderHome(); return; }
+  const n = e.target.closest(".node");
+  if (n && !n.classList.contains("locked")) startLesson(n.dataset.c, +n.dataset.l);
+});
+$("viewSheet").innerHTML = SHEET.map(([h,rows]) => `<section><h3>${h}</h3>${rows.map(([c,d])=>`<div class="cmd"><code>${esc(c)}</code><span>${d}</span></div>`).join("")}</section>`).join("") + `<p class="note">Everything here is taught in the lessons.</p>`;
+function tab(which){
+  $("tabLearn").setAttribute("aria-selected", which==="learn"); $("tabSheet").setAttribute("aria-selected", which==="sheet");
+  $("viewLearn").hidden = which!=="learn"; $("viewSheet").hidden = which!=="sheet";
+}
+$("tabLearn").onclick = () => tab("learn"); $("tabSheet").onclick = () => tab("sheet");
+
+/* ---------- Lesson player ---------- */
+let L = null;
+function startLesson(cid, li){
+  const course = COURSES.find(c=>c.id===cid);
+  const lesson = course.lessons[li];
+  L = {cid, li, course, lesson, queue: lesson.cards.slice(), idx:0, total: lesson.cards.length, correct:0, wrong:0, firstTry:new Set(), state:"show", pick:null, built:[]};
+  $("lesson").hidden = false; $("home").setAttribute("aria-hidden","true");
+  showCard();
+}
+function setFoot(mode, title, text, label, enabled){
+  const f = $("lFoot"); f.className = "l-foot" + (mode ? " " + mode : "");
+  $("fb").hidden = !title; $("fbTitle").textContent = title || ""; $("fbText").innerHTML = text || "";
+  $("go").textContent = label; $("go").disabled = !enabled;
+}
+function progress(){ $("lBar").style.width = Math.min(100, L.idx / L.queue.length * 100) + "%"; }
+function showCard(){
+  progress();
+  const c = L.queue[L.idx]; L.state = "show"; L.pick = null; L.built = [];
+  const m = $("lMain"); m.scrollTop = 0;
+  const kick = `<div class="kicker">${L.course.title} · ${L.lesson.title}</div>`;
+  if (c.t){
+    m.innerHTML = `${kick}<h2>${c.t}</h2><div class="teach">${md(c.body)}${c.tip?`<div class="tip"><b>Tip:</b> ${md(c.tip)}</div>`:""}</div>`;
+    setFoot("", "", "", "Continue", true); L.state = "teach"; return;
+  }
+  if (c.mc){
+    const order = c._order || (c._order = shuffle(c.o.map((_,i)=>i)));
+    m.innerHTML = `${kick}<h2>Quick check</h2><p class="q">${md(esc(c.mc))}</p><div class="opts">${order.map(i=>`<button class="opt" data-i="${i}" aria-pressed="false">${esc(c.o[i])}</button>`).join("")}</div>`;
+    m.querySelectorAll(".opt").forEach(b => b.onclick = () => {
+      if (L.state!=="show") return;
+      m.querySelectorAll(".opt").forEach(x=>x.setAttribute("aria-pressed","false"));
+      b.setAttribute("aria-pressed","true"); L.pick = +b.dataset.i; setFoot("", "", "", "Check", true);
+    });
+    setFoot("", "", "", "Check", false); return;
+  }
+  if (c.fill){
+    m.innerHTML = `${kick}<h2>Type the answer</h2><p class="q">${md(esc(c.fill))}</p><input class="fill" id="fillIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${c.ph||""}"><p class="hint">Not case-sensitive.</p>`;
+    const inp = $("fillIn"); inp.focus();
+    inp.oninput = () => setFoot("", "", "", "Check", inp.value.trim().length>0);
+    inp.onkeydown = e => { if (e.key==="Enter" && inp.value.trim()) $("go").click(); };
+    setFoot("", "", "", "Check", false); return;
+  }
+  if (c.order){
+    const pool = c._pool || (c._pool = shuffle(c.tokens.map((t,i)=>({t,i}))));
+    m.innerHTML = `${kick}<h2>Build it</h2><p class="q">${md(esc(c.order))}</p><div class="build" id="build" aria-label="Your answer"></div><div class="pool" id="pool">${pool.map(p=>`<button class="tok" data-i="${p.i}">${esc(p.t)}</button>`).join("")}</div><p class="hint">Tap pieces to add them. Tap a piece in your answer to remove it.</p>`;
+    const draw = () => {
+      $("build").innerHTML = L.built.map((i,k)=>`<button class="tok" data-k="${k}">${esc(c.tokens[i])}</button>`).join("");
+      $("pool").querySelectorAll(".tok").forEach(b=>b.classList.toggle("used", L.built.includes(+b.dataset.i)));
+      setFoot("", "", "", "Check", L.built.length>0);
+    };
+    $("pool").onclick = e => { const b=e.target.closest(".tok"); if(!b||L.state!=="show"||b.classList.contains("used")) return; L.built.push(+b.dataset.i); draw(); };
+    $("build").onclick = e => { const b=e.target.closest(".tok"); if(!b||L.state!=="show") return; L.built.splice(+b.dataset.k,1); draw(); };
+    draw(); setFoot("", "", "", "Check", false); return;
+  }
+}
+function check(){
+  const c = L.queue[L.idx]; let ok = false, answer = "";
+  if (c.mc){
+    ok = L.pick === c.a; answer = c.o[c.a];
+    $("lMain").querySelectorAll(".opt").forEach(b=>{ const i=+b.dataset.i; if(i===c.a) b.classList.add("right"); else if(i===L.pick) b.classList.add("wrong"); });
+  } else if (c.fill){
+    const v = norm($("fillIn").value); ok = c.ans.some(a=>norm(a)===v); answer = c.ans[0]; $("fillIn").disabled = true;
+  } else if (c.order){
+    ok = L.built.map(i=>c.tokens[i]).join(" ") === c.ans.join(" "); answer = c.ans.join(" ");
+  }
+  L.state = "checked";
+  if (ok){
+    L.correct++; if (!c._missed) L.firstTry.add(c);
+    setFoot("good", "Correct!", esc(c.why), "Continue", true);
+  } else {
+    L.wrong++; c._missed = true; L.queue.push(c);
+    setFoot("bad", "Not quite", `Answer: <code>${esc(answer)}</code><br>${esc(c.why)}<br><i>You'll see this one again at the end.</i>`, "Got it", true);
+  }
+}
+$("go").onclick = () => {
+  if (!L) return;
+  if (L.state === "show") return check();
+  if (L.state === "finished"){ closeLesson(); return; }
+  L.idx++;
+  if (L.idx >= L.queue.length) return finish();
+  showCard();
+};
+function finish(){
+  const qs = L.lesson.cards.filter(c=>!c.t).length;
+  const perfect = L.wrong === 0;
+  const gained = 10 + L.firstTry.size * 2 + (perfect ? 5 : 0);
+  const first = !S.done[L.cid+L.li];
+  S.xp += gained; S.dayXp += gained; S.done[L.cid+L.li] = true;
+  if (S.lastDay !== today()){ S.streak = (S.lastDay === yesterday()) ? S.streak+1 : 1; S.lastDay = today(); }
+  save(); renderHome();
+  $("lBar").style.width = "100%";
+  const next = L.course.lessons[L.li+1];
+  $("lMain").innerHTML = `<div class="done-screen"><div class="kicker">Lesson complete</div><div class="big">+${gained} XP</div><h2>${perfect ? "Perfect run!" : "Nice work, you fixed your mistakes."}</h2>
+    <div class="done-grid"><div><b>${L.firstTry.size}/${qs}</b><span>right first try</span></div><div><b>${S.streak}</b><span>day streak</span></div><div><b>${S.xp}</b><span>total XP</span></div></div>
+    <p>${next ? `Next up: <b>${next.title}</b>${first?" is now unlocked.":"."}` : `You finished <b>${L.course.title}</b>. Pick another course or replay any lesson for practice.`}</p></div>`;
+  L.state = "finished"; setFoot("", "", "", "Back to courses", true);
+}
+function closeLesson(){
+  L && L.lesson.cards.forEach(c=>{ delete c._missed; delete c._order; delete c._pool; });
+  L = null; $("lesson").hidden = true; $("home").removeAttribute("aria-hidden"); renderHome();
+}
+$("quit").onclick = closeLesson;
+window.hdaBack = () => { if (!$("lesson").hidden) { closeLesson(); return true; } return false; };
+renderHome();
+</script>
+</body></html>
