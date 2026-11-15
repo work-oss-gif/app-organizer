@@ -138,7 +138,7 @@ public class MainActivity extends Activity {
         void start() {
             state = PLAYING;
             scroll = 0;
-            speed = 110;
+            speed = 65;
             score = 0;
             newBest = false;
             warning = false;
@@ -229,7 +229,7 @@ public class MainActivity extends Activity {
                 float dt = Math.min(0.05f, (now - lastTime) / 1e9f);
                 lastTime = now;
                 scroll += speed * dt;
-                speed = Math.min(480, speed + 6 * dt);   // slowly speeds up
+                speed = Math.min(400, speed + 2.5f * dt);   // speeds up very gradually
                 score = (int) (scroll / 10);
                 float r = edgeRatio(fingerX, fingerY);
                 if (r > 1f) gameOver();
