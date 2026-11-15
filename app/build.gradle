@@ -6,8 +6,8 @@ android {
         applicationId 'com.example.followpath'
         minSdk 24
         targetSdk 34
-        versionCode 8
-        versionName '2.2'
+        versionCode 9
+        versionName '2.3'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
 }

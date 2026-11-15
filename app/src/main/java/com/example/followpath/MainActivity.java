@@ -23,7 +23,7 @@ import android.view.WindowManager;
  * Slip off the road or lift your finger = game over.
  * The road is the SAME every time, so you can learn it and beat your best score.
  * Modes: Auto speed, Finger height controls speed, Second finger on a slider controls speed.
- * In the two control modes, red stop lights before sharp turns: be slow when you pass them.
+ * In the two control modes, traffic lights before turns: green = any speed, yellow = medium, red = slow.
  */
 public class MainActivity extends Activity {
 
@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
         static final int READY = 0, PLAYING = 1, OVER = 2;
         static final int AUTO = 0, HEIGHT = 1, SLIDER = 2;     // the three modes
         static final float GRAVITY = 22f;   // in control modes the road never goes slower than this
-        static final float SAFE = 50f;      // speed you must be at or below when passing a red light
+        static final int GREEN = 0, YELLOW = 1, RED = 2;
         int state = READY;
 
         final float dp = getResources().getDisplayMetrics().density;
@@ -133,7 +133,21 @@ public class MainActivity extends Activity {
 
         // stop lights: positions along the road (dp), found once, always the same
         final java.util.ArrayList<Float> lights = new java.util.ArrayList<>();
-        float lightsScannedTo = 300;
+        final java.util.ArrayList<Integer> lightColor = new java.util.ArrayList<>();   // GREEN, YELLOW or RED
+        float lightsScannedTo = 600;
+
+        // speed limit option: {yellow limit, red limit} for Relaxed, Normal, Strict
+        final String[] LIMIT_NAMES = {"Relaxed", "Normal", "Strict"};
+        final float[][] LIMITS = {{150, 80}, {100, 50}, {70, 35}};
+        int limitIdx;
+        final RectF limitBtn = new RectF();
+
+        /** Highest speed allowed when passing a light of this color. Green has no limit. */
+        float limitFor(int color) {
+            if (color == RED) return LIMITS[limitIdx][1];
+            if (color == YELLOW) return LIMITS[limitIdx][0];
+            return Float.MAX_VALUE;
+        }
         int nextLight = 0;          // index of the next light the finger has not passed yet
 
         final SharedPreferences prefs = getSharedPreferences("game", Context.MODE_PRIVATE);
@@ -145,6 +159,7 @@ public class MainActivity extends Activity {
             sliderLeft = prefs.getBoolean("sliderLeft", false);
             sizeIdx = prefs.getInt("pathSize", 1);
             colorIdx = prefs.getInt("pathColor", 0);
+            limitIdx = prefs.getInt("limits", 1);
             road.setStyle(Paint.Style.STROKE);
             road.setStrokeCap(Paint.Cap.ROUND);
             road.setStrokeJoin(Paint.Join.ROUND);
@@ -202,14 +217,26 @@ public class MainActivity extends Activity {
         float yOf(float d) { return getHeight() - (d - scroll) * dp; }
         float startY() { return getHeight() * 0.72f; }
 
-        /** Find the sharp turns ahead and put a stop light just before each one. */
+        /** How sharply the road bends in the 120 dp after d (as a fraction of the road area's width). */
+        float sharpAt(float d) {
+            float x0 = roadX(d), sharp = 0;
+            for (int i = 1; i <= 12; i++) sharp = Math.max(sharp, Math.abs(roadX(d + i * 10) - x0));
+            return sharp;
+        }
+
+        /** Find the turns ahead and put a traffic light just before each one.
+         *  Its color is set by the sharpest part of that turn: gentle = green, medium = yellow, sharp = red. */
         void scanLights(float upTo) {
             float d = lightsScannedTo;
             float last = lights.isEmpty() ? -1e9f : lights.get(lights.size() - 1) + 120;
             while (d < upTo) {
-                float x0 = roadX(d), sharp = 0;
-                for (int i = 1; i <= 12; i++) sharp = Math.max(sharp, Math.abs(roadX(d + i * 10) - x0));
-                if (sharp > 0.2f && d - last > 700) { lights.add(d - 120); last = d; }
+                if (d - last > 700 && sharpAt(d) > 0.12f) {
+                    float peak = 0;
+                    for (int j = 0; j < 16; j++) peak = Math.max(peak, sharpAt(d + j * 20));
+                    lights.add(d - 120);
+                    lightColor.add(peak > 0.28f ? RED : peak > 0.2f ? YELLOW : GREEN);
+                    last = d;
+                }
                 d += 20;
             }
             lightsScannedTo = d;
@@ -270,6 +297,12 @@ public class MainActivity extends Activity {
                     mode = (mode + 1) % 3;
                     prefs.edit().putInt("mode", mode).apply();
                     best = prefs.getInt(bestKey(), 0);
+                    invalidate();
+                    return true;
+                }
+                if (action == MotionEvent.ACTION_DOWN && hasLights() && limitBtn.contains(e.getX(), e.getY())) {
+                    limitIdx = (limitIdx + 1) % LIMIT_NAMES.length;
+                    prefs.edit().putInt("limits", limitIdx).apply();
                     invalidate();
                     return true;
                 }
@@ -362,7 +395,11 @@ public class MainActivity extends Activity {
                 scanLights(distAt(-200 * dp) + 200);
                 float fingerDist = distAt(fingerY);
                 while (nextLight < lights.size() && lights.get(nextLight) <= fingerDist) {
-                    if (speed > SAFE) { gameOver("You ran a red light!"); return; }
+                    int col = lightColor.get(nextLight);
+                    if (speed > limitFor(col)) {
+                        gameOver(col == RED ? "You ran a red light!" : "Too fast through a yellow light!");
+                        return;
+                    }
                     nextLight++;
                     vibrate(20);
                 }
@@ -411,7 +448,7 @@ public class MainActivity extends Activity {
                     float ly = yOf(lights.get(i));
                     if (ly < -80 * dp || ly > h + 80 * dp) continue;
                     boolean passed = i < nextLight;
-                    drawLight(c, lights.get(i), ly, passed, dark, txt);
+                    drawLight(c, lights.get(i), lightColor.get(i), ly, passed, dark);
                 }
             }
 
@@ -447,46 +484,61 @@ public class MainActivity extends Activity {
             c.drawText(String.valueOf(score), cx, 70 * dp, text);
             text.setFakeBoldText(false);
             if (mode != AUTO) {
-                boolean tooFast = speed > SAFE;
                 text.setTextSize(15 * dp);
-                text.setColor(tooFast ? sub : edgeCol);
-                c.drawText("Speed " + Math.round(speed) + (tooFast ? "" : "  (safe for red lights)"), cx, 96 * dp, text);
+                text.setColor(sub);
+                String line = "Speed " + Math.round(speed);
+                // tell you what the next light needs
+                if (nextLight < lights.size() && yOf(lights.get(nextLight)) > -40 * dp) {
+                    int col = lightColor.get(nextLight);
+                    if (col == GREEN) line += "   next light: GREEN, any speed";
+                    else {
+                        int lim = (int) limitFor(col);
+                        boolean ok = speed <= lim;
+                        line += "   next light: " + (col == RED ? "RED" : "YELLOW") + ", " + lim + " or less"
+                                + (ok ? "  \u2713" : "");
+                        text.setColor(ok ? edgeCol : (col == RED ? 0xFFFF3B30 : (dark ? 0xFFFFD54F : 0xFFB08800)));
+                    }
+                }
+                c.drawText(line, cx, 96 * dp, text);
             }
 
             if (state == PLAYING) { postInvalidateOnAnimation(); return; }
             drawGameOver(c, w, h, dark, edgeCol, txt, sub, bad);
         }
 
-        /** A traffic light on a pole beside the road. Red while you're too fast, green once you're slow enough. */
-        void drawLight(Canvas c, float d, float y, boolean passed, boolean dark, int txt) {
+        /** A traffic light on a pole beside the road, with its own color lit: red, yellow or green.
+         *  The line across the road shows its color; once you're slow enough it gets a check mark. */
+        void drawLight(Canvas c, float d, int col, float y, boolean passed, boolean dark) {
             float roadCenter = roadPx(d);
             float off = (roadWidth() / 2f + 34) * dp;
-            // put it on the side of the road with more room
             float x = roadCenter > playLeft() + playW() / 2f ? roadCenter - off : roadCenter + off;
-            boolean safe = speed <= SAFE;
-            float bw = 26 * dp, bh = 62 * dp;
+            float bw = 26 * dp, bh = 84 * dp;
+            int red = 0xFFFF3B30, yellow = 0xFFFFCC00, green = 0xFF34C759;
+            int lit = col == RED ? red : col == YELLOW ? yellow : green;
             // pole
             btn.setColor(dark ? 0xFF5F6368 : 0xFF80868B);
             c.drawRect(x - 2 * dp, y, x + 2 * dp, y + 34 * dp, btn);
-            // box
+            // box with three lamps: red on top, yellow in the middle, green at the bottom
             btn.setColor(dark ? 0xFF2A2E35 : 0xFF3C4043);
             tmp.set(x - bw / 2, y - bh, x + bw / 2, y);
             c.drawRoundRect(tmp, 7 * dp, 7 * dp, btn);
-            int off2 = dark ? 0xFF3A3F47 : 0xFF5F6368;
-            int red = 0xFFFF3B30, green = 0xFF34C759;
-            boolean showRed = !passed && !safe;
-            boolean showGreen = passed || safe;
-            dot.setColor(showRed ? red : off2);
-            c.drawCircle(x, y - bh + 16 * dp, 9 * dp, dot);
-            dot.setColor(showGreen ? green : off2);
-            c.drawCircle(x, y - 16 * dp, 9 * dp, dot);
-            // stop line across the road
-            btn.setColor(showRed ? 0xCCFF3B30 : 0x8834C759);
+            int dim = dark ? 0xFF3A3F47 : 0xFF5F6368;
+            dot.setColor(col == RED ? red : dim);
+            c.drawCircle(x, y - bh + 15 * dp, 9 * dp, dot);
+            dot.setColor(col == YELLOW ? yellow : dim);
+            c.drawCircle(x, y - bh / 2f, 9 * dp, dot);
+            dot.setColor(col == GREEN ? green : dim);
+            c.drawCircle(x, y - 15 * dp, 9 * dp, dot);
+            // line across the road in the light's color
+            btn.setColor((lit & 0x00FFFFFF) | (passed ? 0x66000000 : 0xCC000000));
             float half = roadWidth() / 2f * dp;
             c.drawRect(roadCenter - half, y - 2 * dp, roadCenter + half, y + 2 * dp, btn);
-            if (showRed) {
-                text.setColor(red); text.setTextSize(13 * dp); text.setFakeBoldText(true);
-                c.drawText("SLOW", x, y - bh - 8 * dp, text);
+            // label above the light
+            if (!passed && col != GREEN) {
+                int lim = (int) limitFor(col);
+                boolean ok = speed <= lim;
+                text.setColor(ok ? green : lit); text.setTextSize(13 * dp); text.setFakeBoldText(true);
+                c.drawText(ok ? "OK \u2713" : "SLOW " + lim, x, y - bh - 8 * dp, text);
                 text.setFakeBoldText(false);
             }
         }
@@ -535,7 +587,7 @@ public class MainActivity extends Activity {
             c.drawText("Mode: " + modeName(), w / 2f, bt + 32 * dp, text);
             text.setFakeBoldText(false); text.setColor(sub); text.setTextSize(14 * dp);
             c.drawText(modeHelp(), w / 2f, bt + bh + 22 * dp, text);
-            c.drawText(hasLights() ? "Red lights before sharp turns: be slow (" + (int) SAFE + " or less) when you pass them"
+            c.drawText(hasLights() ? "Traffic lights before turns: green = any speed, yellow = medium, red = slow"
                                    : "Tap the button to change mode", w / 2f, bt + bh + 44 * dp, text);
 
             // slider side button (only in slider mode)
@@ -568,6 +620,19 @@ public class MainActivity extends Activity {
             c.drawCircle(colorBtn.left + 22 * dp, colorBtn.centerY(), 9 * dp, dot);
             c.drawText(COLOR_NAMES[colorIdx], colorBtn.centerX() + 10 * dp, rt + 31 * dp, text);
             text.setFakeBoldText(false);
+
+            // speed limits for the lights (only in modes that have lights)
+            if (hasLights()) {
+                float lt = rt + bh + 10 * dp;
+                limitBtn.set(bl, lt, bl + bw, lt + bh);
+                btn.setColor(dark ? 0xFF2A2E35 : 0xFFE3E6EA);
+                c.drawRoundRect(limitBtn, 14 * dp, 14 * dp, btn);
+                float[] L = LIMITS[limitIdx];
+                text.setColor(txt); text.setTextSize(15 * dp); text.setFakeBoldText(true);
+                c.drawText("Light limits: " + LIMIT_NAMES[limitIdx], w / 2f, lt + 22 * dp, text);
+                text.setFakeBoldText(false); text.setColor(sub); text.setTextSize(13 * dp);
+                c.drawText("Yellow " + (int) L[0] + " or less  \u2022  Red " + (int) L[1] + " or less", w / 2f, lt + 40 * dp, text);
+            } else limitBtn.setEmpty();
             postInvalidateOnAnimation();
         }
 
