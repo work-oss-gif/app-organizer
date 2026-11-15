@@ -124,12 +124,29 @@ public class MainActivity extends Activity {
 
         /** Center of the road at distance d (dp), as a fraction of screen width 0..1. Same every game. */
         float roadX(float d) {
-            double x = 0.5
+            double curve = 0.5
                     + 0.22 * Math.sin(d / 260.0)
                     + 0.12 * Math.sin(d / 113.0 + 1.3)
                     + 0.05 * Math.sin(d / 47.0 + 2.1);
+
+            // Every 1500 dp the road repeats this plan:
+            //   0-650 curvy, 650-900 bends into a straight, 900-1250 STRAIGHT, 1250-1500 bends back to curvy.
+            // Each straight sits at its own spot across the screen, always the same.
+            final double P = 1500;
+            double p = ((d % P) + P) % P;
+            long k = (long) Math.floor(d / P);
+            double hold = 0.5 + 0.22 * Math.sin(k * 2.3 + 0.7);   // where this straight sits
+            double s;                                            // 1 = curvy, 0 = straight
+            if (p < 650) s = 1;
+            else if (p < 900) s = 1 - smooth((p - 650) / 250);
+            else if (p < 1250) s = 0;
+            else s = smooth((p - 1250) / 250);
+            double x = s * curve + (1 - s) * hold;
             return (float) Math.max(0.12, Math.min(0.88, x));
         }
+
+        /** Smooth 0..1 curve so the road eases in and out of straights with no sharp corner. */
+        double smooth(double t) { return t * t * (3 - 2 * t); }
 
         /** Road width in dp: starts wide, slowly gets narrower. */
         float roadWidth() { return Math.max(46f, 84f - scroll / 250f); }
