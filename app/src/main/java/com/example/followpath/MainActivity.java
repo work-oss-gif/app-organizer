@@ -96,6 +96,8 @@ public class MainActivity extends Activity {
         int score = 0, best;
         boolean newBest = false;
         long overAt = 0;
+        long lastWarn = 0;          // when the last warning buzz happened
+        boolean warning = false;    // finger is close to the edge right now
         final SharedPreferences prefs = getSharedPreferences("game", Context.MODE_PRIVATE);
 
         GameView(Context c) {
@@ -139,6 +141,7 @@ public class MainActivity extends Activity {
             speed = 110;
             score = 0;
             newBest = false;
+            warning = false;
             lastTime = System.nanoTime();
             postInvalidateOnAnimation();
         }
@@ -161,10 +164,21 @@ public class MainActivity extends Activity {
             else v.vibrate(250);
         }
 
-        /** Is the finger on the road right now? A little extra room (6dp) so it feels fair. */
-        boolean onRoad(float x, float y) {
+        /** How far the finger is from the middle of the road: 0 = center, 1 = right at the edge, above 1 = off. */
+        float edgeRatio(float x, float y) {
             float cx = roadX(distAt(y)) * getWidth();
-            return Math.abs(x - cx) <= (roadWidth() / 2f + 6f) * dp;
+            return Math.abs(x - cx) / ((roadWidth() / 2f + 6f) * dp);
+        }
+
+        /** Is the finger on the road right now? A little extra room (6dp) so it feels fair. */
+        boolean onRoad(float x, float y) { return edgeRatio(x, y) <= 1f; }
+
+        /** Short tick buzz used as a warning when the finger gets near the edge. */
+        void warnBuzz() {
+            Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (v == null) return;
+            if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE));
+            else v.vibrate(35);
         }
 
         @Override
@@ -217,7 +231,14 @@ public class MainActivity extends Activity {
                 scroll += speed * dt;
                 speed = Math.min(480, speed + 6 * dt);   // slowly speeds up
                 score = (int) (scroll / 10);
-                if (!onRoad(fingerX, fingerY)) gameOver();
+                float r = edgeRatio(fingerX, fingerY);
+                if (r > 1f) gameOver();
+                else {
+                    // Close to the edge (outer 30% of the road): buzz about 6 times a second.
+                    warning = r > 0.7f;
+                    long ms = System.currentTimeMillis();
+                    if (warning && ms - lastWarn > 160) { lastWarn = ms; warnBuzz(); }
+                }
             }
 
             c.drawColor(bg);
@@ -257,7 +278,8 @@ public class MainActivity extends Activity {
 
             // finger marker
             if (fingerX >= 0) {
-                dot.setColor(state == OVER ? bad : txt);
+                int warnCol = dark ? 0xFFFFB74D : 0xFFE37400;   // orange = too close to the edge
+                dot.setColor(state == OVER ? bad : (warning ? warnCol : txt));
                 dot.setAlpha(state == OVER ? 255 : 170);
                 c.drawCircle(fingerX, fingerY, 14 * dp, dot);
                 dot.setAlpha(255);
