@@ -7,6 +7,7 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RectF;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
@@ -94,6 +95,10 @@ public class MainActivity extends Activity {
         float fingerX = -1, fingerY = -1;
         int pointerId = -1;
         int score = 0, best;
+        boolean fingerSpeed;        // option: finger height controls the speed
+        final RectF modeBtn = new RectF();
+        final Paint btn = new Paint(Paint.ANTI_ALIAS_FLAG);
+        static final float GRAVITY = 22f;   // in finger mode the road never goes slower than this
         boolean newBest = false;
         long overAt = 0;
         long lastWarn = 0;          // when the last warning buzz happened
@@ -102,7 +107,8 @@ public class MainActivity extends Activity {
 
         GameView(Context c) {
             super(c);
-            best = prefs.getInt("best", 0);
+            fingerSpeed = prefs.getBoolean("fingerSpeed", false);
+            best = prefs.getInt(bestKey(), 0);
             road.setStyle(Paint.Style.STROKE);
             road.setStrokeCap(Paint.Cap.ROUND);
             road.setStrokeJoin(Paint.Join.ROUND);
@@ -133,12 +139,15 @@ public class MainActivity extends Activity {
 
         float startY() { return getHeight() * 0.72f; }
 
+        /** Each mode keeps its own best score, so the scores stay fair. */
+        String bestKey() { return fingerSpeed ? "best_finger" : "best"; }
+
         // ---------- game loop ----------
 
         void start() {
             state = PLAYING;
             scroll = 0;
-            speed = 65;
+            speed = fingerSpeed ? GRAVITY : 65;
             score = 0;
             newBest = false;
             warning = false;
@@ -150,7 +159,7 @@ public class MainActivity extends Activity {
             if (state != PLAYING) return;
             state = OVER;
             overAt = System.currentTimeMillis();
-            if (score > best) { best = score; newBest = true; prefs.edit().putInt("best", best).apply(); }
+            if (score > best) { best = score; newBest = true; prefs.edit().putInt(bestKey(), best).apply(); }
             buzz();
             invalidate();
         }
@@ -185,6 +194,14 @@ public class MainActivity extends Activity {
         public boolean onTouchEvent(MotionEvent e) {
             int action = e.getActionMasked();
             if (state == READY) {
+                // Tap the mode button to switch between the two modes.
+                if (action == MotionEvent.ACTION_DOWN && modeBtn.contains(e.getX(), e.getY())) {
+                    fingerSpeed = !fingerSpeed;
+                    prefs.edit().putBoolean("fingerSpeed", fingerSpeed).apply();
+                    best = prefs.getInt(bestKey(), 0);
+                    invalidate();
+                    return true;
+                }
                 if (action == MotionEvent.ACTION_DOWN && onRoad(e.getX(), e.getY())
                         && Math.abs(e.getY() - startY()) < 70 * dp) {
                     pointerId = e.getPointerId(0);
@@ -229,7 +246,17 @@ public class MainActivity extends Activity {
                 float dt = Math.min(0.05f, (now - lastTime) / 1e9f);
                 lastTime = now;
                 scroll += speed * dt;
-                speed = Math.min(400, speed + 2.5f * dt);   // speeds up very gradually
+                if (fingerSpeed) {
+                    // Finger above the line = speed up. Below the line = brake.
+                    // The further from the line, the stronger. Gravity keeps it creeping forward.
+                    float pull = (startY() - fingerY) / (getHeight() * 0.4f);
+                    pull = Math.max(-1f, Math.min(1f, pull));
+                    if (Math.abs(pull) < 0.06f) pull = 0;          // small dead zone around the line
+                    float accel = pull > 0 ? pull * 140f : pull * 260f;  // braking is stronger
+                    speed = Math.max(GRAVITY, Math.min(450, speed + accel * dt));
+                } else {
+                    speed = Math.min(400, speed + 2.5f * dt);   // speeds up very gradually
+                }
                 score = (int) (scroll / 10);
                 float r = edgeRatio(fingerX, fingerY);
                 if (r > 1f) gameOver();
@@ -272,8 +299,37 @@ public class MainActivity extends Activity {
                 c.drawText("Put your finger on the glowing circle", w / 2f, h * 0.16f + 34 * dp, text);
                 c.drawText("and keep it on the road. Don't lift it!", w / 2f, h * 0.16f + 58 * dp, text);
                 c.drawText("Best: " + best, w / 2f, h * 0.16f + 92 * dp, text);
+
+                // mode button
+                float bw = Math.min(w - 40 * dp, 330 * dp), bh = 50 * dp;
+                float bt = h * 0.16f + 112 * dp;
+                modeBtn.set((w - bw) / 2f, bt, (w + bw) / 2f, bt + bh);
+                btn.setColor(dark ? 0xFF2A2E35 : 0xFFE3E6EA);
+                c.drawRoundRect(modeBtn, 14 * dp, 14 * dp, btn);
+                text.setColor(txt); text.setTextSize(16 * dp); text.setFakeBoldText(true);
+                c.drawText(fingerSpeed ? "Mode: Finger controls speed" : "Mode: Auto speed",
+                        w / 2f, bt + 32 * dp, text);
+                text.setFakeBoldText(false); text.setColor(sub); text.setTextSize(14 * dp);
+                c.drawText(fingerSpeed ? "Finger up = faster, down = slower (tap to change)"
+                                       : "Speeds up slowly by itself (tap to change)",
+                        w / 2f, bt + bh + 22 * dp, text);
                 postInvalidateOnAnimation();   // keep the circle pulsing
                 return;
+            }
+
+            // finger mode: show the speed line and the current speed
+            if (fingerSpeed) {
+                float ly = startY();
+                btn.setColor(sub); btn.setAlpha(140);
+                for (float x = 0; x < w; x += 18 * dp) c.drawRect(x, ly - 1 * dp, x + 10 * dp, ly + 1 * dp, btn);
+                btn.setAlpha(255);
+                text.setColor(sub); text.setTextSize(13 * dp);
+                text.setTextAlign(Paint.Align.LEFT);
+                c.drawText("\u25B2 faster", 12 * dp, ly - 10 * dp, text);
+                c.drawText("\u25BC slower", 12 * dp, ly + 22 * dp, text);
+                text.setTextAlign(Paint.Align.CENTER);
+                text.setTextSize(15 * dp);
+                c.drawText("Speed " + Math.round(speed), w / 2f, 96 * dp, text);
             }
 
             // finger marker
