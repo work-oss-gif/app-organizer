@@ -96,6 +96,8 @@ public class MainActivity extends Activity {
         final Paint btn = new Paint(Paint.ANTI_ALIAS_FLAG);
         final Path shape = new Path();
         final RectF modeBtn = new RectF();
+        final RectF sideBtn = new RectF();
+        boolean sliderLeft;         // option: slider on the left side instead of the right
         final RectF tmp = new RectF();
 
         int mode;
@@ -124,6 +126,7 @@ public class MainActivity extends Activity {
             super(c);
             mode = prefs.getInt("mode", prefs.getBoolean("fingerSpeed", false) ? HEIGHT : AUTO);
             best = prefs.getInt(bestKey(), 0);
+            sliderLeft = prefs.getBoolean("sliderLeft", false);
             road.setStyle(Paint.Style.STROKE);
             road.setStrokeCap(Paint.Cap.ROUND);
             road.setStrokeJoin(Paint.Join.ROUND);
@@ -139,7 +142,7 @@ public class MainActivity extends Activity {
         String modeName() { return mode == HEIGHT ? "Finger height" : mode == SLIDER ? "Second finger slider" : "Auto speed"; }
         String modeHelp() {
             if (mode == HEIGHT) return "Finger up = faster, down = slower";
-            if (mode == SLIDER) return "2nd finger on the right strip: up = faster, down = slower";
+            if (mode == SLIDER) return "2nd finger on the " + (sliderLeft ? "left" : "right") + " strip: up = faster, down = slower";
             return "Speeds up slowly by itself";
         }
         boolean hasLights() { return mode != AUTO; }
@@ -171,7 +174,9 @@ public class MainActivity extends Activity {
         /** In slider mode the right side of the screen is the slider, so the road stays to the left of it. */
         float sliderW() { return 76 * dp; }
         float playW() { return mode == SLIDER ? getWidth() - sliderW() - 8 * dp : getWidth(); }
-        float roadPx(float d) { return roadX(d) * playW(); }
+        /** Where the road area starts: after the slider when the slider is on the left. */
+        float playLeft() { return mode == SLIDER && sliderLeft ? sliderW() + 8 * dp : 0; }
+        float roadPx(float d) { return playLeft() + roadX(d) * playW(); }
 
         float roadWidth() { return Math.max(46f, 84f - scroll / 250f); }
         float distAt(float y) { return scroll + (getHeight() - y) / dp; }
@@ -234,7 +239,8 @@ public class MainActivity extends Activity {
 
         void sliderRect(RectF r) {
             float h = getHeight();
-            r.set(getWidth() - sliderW(), h * 0.22f, getWidth() - 6 * dp, h * 0.94f);
+            if (sliderLeft) r.set(6 * dp, h * 0.22f, sliderW(), h * 0.94f);
+            else r.set(getWidth() - sliderW(), h * 0.22f, getWidth() - 6 * dp, h * 0.94f);
         }
 
         @Override
@@ -245,6 +251,12 @@ public class MainActivity extends Activity {
                     mode = (mode + 1) % 3;
                     prefs.edit().putInt("mode", mode).apply();
                     best = prefs.getInt(bestKey(), 0);
+                    invalidate();
+                    return true;
+                }
+                if (action == MotionEvent.ACTION_DOWN && mode == SLIDER && sideBtn.contains(e.getX(), e.getY())) {
+                    sliderLeft = !sliderLeft;
+                    prefs.edit().putBoolean("sliderLeft", sliderLeft).apply();
                     invalidate();
                     return true;
                 }
@@ -398,7 +410,7 @@ public class MainActivity extends Activity {
             }
 
             // score and speed at the top
-            float cx = playW() / 2f;
+            float cx = playLeft() + playW() / 2f;
             text.setColor(txt); text.setTextSize(34 * dp); text.setFakeBoldText(true);
             c.drawText(String.valueOf(score), cx, 70 * dp, text);
             text.setFakeBoldText(false);
@@ -418,7 +430,7 @@ public class MainActivity extends Activity {
             float roadCenter = roadPx(d);
             float off = (roadWidth() / 2f + 34) * dp;
             // put it on the side of the road with more room
-            float x = roadCenter > playW() / 2f ? roadCenter - off : roadCenter + off;
+            float x = roadCenter > playLeft() + playW() / 2f ? roadCenter - off : roadCenter + off;
             boolean safe = speed <= SAFE;
             float bw = 26 * dp, bh = 62 * dp;
             // pole
@@ -493,6 +505,21 @@ public class MainActivity extends Activity {
             c.drawText(modeHelp(), w / 2f, bt + bh + 22 * dp, text);
             c.drawText(hasLights() ? "Red lights before sharp turns: be slow (" + (int) SAFE + " or less) when you pass them"
                                    : "Tap the button to change mode", w / 2f, bt + bh + 44 * dp, text);
+
+            // slider side button (only in slider mode)
+            if (mode == SLIDER) {
+                float st = bt + bh + 62 * dp;
+                sideBtn.set((w - bw) / 2f, st, (w + bw) / 2f, st + bh);
+                btn.setColor(dark ? 0xFF2A2E35 : 0xFFE3E6EA);
+                c.drawRoundRect(sideBtn, 14 * dp, 14 * dp, btn);
+                text.setColor(txt); text.setTextSize(16 * dp); text.setFakeBoldText(true);
+                c.drawText(sliderLeft ? "Slider: \u25C0 Left side" : "Slider: Right side \u25B6", w / 2f, st + 32 * dp, text);
+                text.setFakeBoldText(false);
+                // preview of where the slider will be
+                sliderRect(tmp);
+                btn.setColor(dark ? 0x5522262C : 0x55B0B6BE);
+                c.drawRoundRect(tmp, 18 * dp, 18 * dp, btn);
+            } else sideBtn.setEmpty();
             postInvalidateOnAnimation();
         }
 
