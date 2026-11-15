@@ -101,11 +101,11 @@ public class MainActivity extends Activity {
         final RectF colorBtn = new RectF();
 
         // path size and color options
-        static final String[] SIZE_NAMES = {"Small", "Medium", "Large", "Extra large"};
-        static final float[] SIZE_MUL = {0.75f, 1f, 1.3f, 1.6f};
-        static final String[] COLOR_NAMES = {"Green", "Blue", "Purple", "Orange", "Pink", "Gray"};
+        final String[] SIZE_NAMES = {"Small", "Medium", "Large", "Extra large"};
+        final float[] SIZE_MUL = {0.75f, 1f, 1.3f, 1.6f};
+        final String[] COLOR_NAMES = {"Green", "Blue", "Purple", "Orange", "Pink", "Gray"};
         // each color: road (light mode), edge (light mode), road (dark mode), edge (dark mode)
-        static final int[][] COLORS = {
+        final int[][] COLORS = {
                 {0xFF7FD3A6, 0xFF2E9E6A, 0xFF2E7D5B, 0xFF4CC38A},
                 {0xFF90C2F9, 0xFF1A73E8, 0xFF1F4E8C, 0xFF5B9BF0},
                 {0xFFC9A7F5, 0xFF8E44D9, 0xFF4B2C7A, 0xFFA97BEA},
