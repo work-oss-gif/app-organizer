@@ -1,5 +1,7 @@
 name: Build APK
 on: [push, workflow_dispatch]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,3 +16,15 @@ jobs:
         with:
           name: FollowThePath-apk
           path: app/build/outputs/apk/debug/*.apk
+      - name: Publish APK as a release (direct download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk FollowThePath.apk
+          TAG=follow-the-path-latest
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" FollowThePath.apk --clobber
+          else
+            gh release create "$TAG" FollowThePath.apk --target "$GITHUB_SHA" \
+              --title "Follow the Path" --notes "Keep your finger on the road as it flows down the screen."
+          fi
