@@ -97,6 +97,22 @@ public class MainActivity extends Activity {
         final Path shape = new Path();
         final RectF modeBtn = new RectF();
         final RectF sideBtn = new RectF();
+        final RectF sizeBtn = new RectF();
+        final RectF colorBtn = new RectF();
+
+        // path size and color options
+        static final String[] SIZE_NAMES = {"Small", "Medium", "Large", "Extra large"};
+        static final float[] SIZE_MUL = {0.75f, 1f, 1.3f, 1.6f};
+        static final String[] COLOR_NAMES = {"Green", "Blue", "Purple", "Orange", "Pink", "Gray"};
+        // each color: road (light mode), edge (light mode), road (dark mode), edge (dark mode)
+        static final int[][] COLORS = {
+                {0xFF7FD3A6, 0xFF2E9E6A, 0xFF2E7D5B, 0xFF4CC38A},
+                {0xFF90C2F9, 0xFF1A73E8, 0xFF1F4E8C, 0xFF5B9BF0},
+                {0xFFC9A7F5, 0xFF8E44D9, 0xFF4B2C7A, 0xFFA97BEA},
+                {0xFFFFC48A, 0xFFE37400, 0xFF8A4B12, 0xFFFF9E40},
+                {0xFFF7A8C8, 0xFFD63384, 0xFF7A2550, 0xFFF06AA6},
+                {0xFFC4C8CE, 0xFF6B7280, 0xFF3C424B, 0xFF8A93A0}};
+        int sizeIdx, colorIdx;
         boolean sliderLeft;         // option: slider on the left side instead of the right
         final RectF tmp = new RectF();
 
@@ -127,6 +143,8 @@ public class MainActivity extends Activity {
             mode = prefs.getInt("mode", prefs.getBoolean("fingerSpeed", false) ? HEIGHT : AUTO);
             best = prefs.getInt(bestKey(), 0);
             sliderLeft = prefs.getBoolean("sliderLeft", false);
+            sizeIdx = prefs.getInt("pathSize", 1);
+            colorIdx = prefs.getInt("pathColor", 0);
             road.setStyle(Paint.Style.STROKE);
             road.setStrokeCap(Paint.Cap.ROUND);
             road.setStrokeJoin(Paint.Join.ROUND);
@@ -178,7 +196,8 @@ public class MainActivity extends Activity {
         float playLeft() { return mode == SLIDER && sliderLeft ? sliderW() + 8 * dp : 0; }
         float roadPx(float d) { return playLeft() + roadX(d) * playW(); }
 
-        float roadWidth() { return Math.max(46f, 84f - scroll / 250f); }
+        /** Road width in dp: starts wide, slowly gets narrower. The size option makes it all bigger or smaller. */
+        float roadWidth() { return Math.max(46f, 84f - scroll / 250f) * SIZE_MUL[sizeIdx]; }
         float distAt(float y) { return scroll + (getHeight() - y) / dp; }
         float yOf(float d) { return getHeight() - (d - scroll) * dp; }
         float startY() { return getHeight() * 0.72f; }
@@ -251,6 +270,18 @@ public class MainActivity extends Activity {
                     mode = (mode + 1) % 3;
                     prefs.edit().putInt("mode", mode).apply();
                     best = prefs.getInt(bestKey(), 0);
+                    invalidate();
+                    return true;
+                }
+                if (action == MotionEvent.ACTION_DOWN && sizeBtn.contains(e.getX(), e.getY())) {
+                    sizeIdx = (sizeIdx + 1) % SIZE_NAMES.length;
+                    prefs.edit().putInt("pathSize", sizeIdx).apply();
+                    invalidate();
+                    return true;
+                }
+                if (action == MotionEvent.ACTION_DOWN && colorBtn.contains(e.getX(), e.getY())) {
+                    colorIdx = (colorIdx + 1) % COLOR_NAMES.length;
+                    prefs.edit().putInt("pathColor", colorIdx).apply();
                     invalidate();
                     return true;
                 }
@@ -344,8 +375,9 @@ public class MainActivity extends Activity {
         protected void onDraw(Canvas c) {
             boolean dark = isDark();
             int bg = bgColor();
-            int roadCol = dark ? 0xFF2E7D5B : 0xFF7FD3A6;
-            int edgeCol = dark ? 0xFF4CC38A : 0xFF2E9E6A;
+            int[] pc = COLORS[colorIdx];
+            int roadCol = dark ? pc[2] : pc[0];
+            int edgeCol = dark ? pc[3] : pc[1];
             int midCol = dark ? 0x66FFFFFF : 0x88FFFFFF;
             int txt = dark ? 0xFFE8EAED : 0xFF1B1D21;
             int sub = dark ? 0xFF9AA0A6 : 0xFF5F6368;
@@ -520,6 +552,22 @@ public class MainActivity extends Activity {
                 btn.setColor(dark ? 0x5522262C : 0x55B0B6BE);
                 c.drawRoundRect(tmp, 18 * dp, 18 * dp, btn);
             } else sideBtn.setEmpty();
+
+            // path size and path color buttons, side by side
+            float rt = bt + bh + (mode == SLIDER ? 124 : 62) * dp;
+            float gap = 10 * dp, half = (bw - gap) / 2f, bl = (w - bw) / 2f;
+            sizeBtn.set(bl, rt, bl + half, rt + bh);
+            colorBtn.set(bl + half + gap, rt, bl + bw, rt + bh);
+            btn.setColor(dark ? 0xFF2A2E35 : 0xFFE3E6EA);
+            c.drawRoundRect(sizeBtn, 14 * dp, 14 * dp, btn);
+            c.drawRoundRect(colorBtn, 14 * dp, 14 * dp, btn);
+            text.setColor(txt); text.setTextSize(15 * dp); text.setFakeBoldText(true);
+            c.drawText("Size: " + SIZE_NAMES[sizeIdx], sizeBtn.centerX(), rt + 31 * dp, text);
+            // color button: a swatch of the color plus its name
+            dot.setColor(edgeCol);
+            c.drawCircle(colorBtn.left + 22 * dp, colorBtn.centerY(), 9 * dp, dot);
+            c.drawText(COLOR_NAMES[colorIdx], colorBtn.centerX() + 10 * dp, rt + 31 * dp, text);
+            text.setFakeBoldText(false);
             postInvalidateOnAnimation();
         }
 
